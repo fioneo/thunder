@@ -1,7 +1,5 @@
 package main
 
-
-
 type PlayMode int
 
 const (
@@ -15,7 +13,7 @@ func (pm PlayMode) ToString() string {
 
 	switch pm {
 	case DefaultMode:
-		str = "Default"
+		str = "Seq"
 	case RandomMode:
 		str = "Random"
 	case RepeatMode:

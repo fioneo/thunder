@@ -16,7 +16,7 @@ type Library struct {
 
 func NewLibrary(dir string) *Library {
 	rootDir := filepath.Join(dir, "Music")
-	root := tview.NewTreeNode("Music").SetColor(tcell.ColorBlue).SetSelectable(false)
+	root := tview.NewTreeNode("Music").SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)).SetSelectable(false)
 	tree := tview.NewTreeView().SetRoot(root).SetCurrentNode(root)
 
 	library := &Library{
@@ -38,12 +38,14 @@ func NewLibrary(dir string) *Library {
 		}
 	})
 
-	library.SetBorderColor(tcell.ColorBlue).
-		SetBorder(true).
-		SetTitle("Library").
-		SetTitleColor(tcell.ColorBlue).
-		SetTitleAlign(tview.AlignLeft).
-		SetBorderPadding(0, 0, 1, 1)
+	library.
+			SetBorder(true).
+			SetTitle("Library").
+			SetTitleAlign(tview.AlignLeft).
+			SetBorderColor(thunder.Colors.Accent).
+			SetTitleColor(thunder.Colors.Accent).
+			SetBorderPadding(0, 0, 1, 1).
+			SetBackgroundColor(thunder.Colors.Background)
 
 	return library
 }
@@ -62,15 +64,16 @@ func addNode(target *tview.TreeNode, path string) {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) != allowedExt {
 			continue
 		}
-		color := tcell.ColorWhite
+		style := tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)
+		selectedStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)
 		node := tview.NewTreeNode(entry.Name()).
 			SetReference(filepath.Join(path, entry.Name()))
 		if entry.IsDir() {
-			color = tcell.ColorBlue
-		} else {
-			color = tcell.ColorPurple
+			style = tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)
+			selectedStyle = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist)
 		}
-		node.SetColor(color)
+		node.SetTextStyle(style)
+		node.SetSelectedTextStyle(selectedStyle)
 		target.AddChild(node)
 	}
 }

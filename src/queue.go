@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/gdamore/tcell/v2"
 )
 
 type Queue struct {
 	*tview.List
+	updateTitle func()
 	mode        PlayMode
 	songs       []Song
 	currentIdx  int
@@ -16,20 +16,33 @@ type Queue struct {
 
 func NewQueue(songs []Song) *Queue {
 	list := tview.NewList()
-
+	
 	queue := &Queue{
 		List:  list,
 		mode:  DefaultMode,
 		songs: songs,
 	}
 
-	queue.UpdateTitle()
-
-	queue.SetBorder(true).
-		SetBorderColor(tcell.ColorBlue).
-		SetTitleColor(tcell.ColorBlue).
-		SetBorderPadding(0, 0, 1, 1)
-
+	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+					case 'j':
+						return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+					case 'k':
+						return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+					}
+			return nil
+	})
+	
+	queue.InsertAll()
+	
+	queue.
+	SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
+	ShowSecondaryText(false).
+	SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(tcell.ColorDefault)).
+	SetHighlightFullLine(true).
+	SetWrapAround(false).
+	SetBackgroundColor(thunder.Colors.Background)
+	
 	return queue
 }
 
@@ -99,15 +112,21 @@ func (q *Queue) dequeue() Song {
 	return song
 }
 
-func (q *Queue) UpdateTitle() {
-	title := fmt.Sprintf(
-		"─ Queue ───┤ %d / %d ├",
-		q.currentSong,
-		len(q.songs),
-	)
-	q.SetTitle(title)
+func (q *Queue) SetUpdateTitleFunc(deligate func()) {
+	q.updateTitle = deligate
 }
+
+func (q *Queue) UpdateTitle() {
+	q.updateTitle()
+}
+
 
 func (q *Queue) Play()  {
 	// TODO
+}
+
+func (q *Queue) InsertAll() {
+	for i, song := range q.songs {
+		q.List.InsertItem(i, song.Name(), "", 0, nil)
+	}
 }

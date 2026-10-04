@@ -6,7 +6,8 @@ import (
 )
 
 type Playlist struct {
-	*tview.List
+	*tview.Pages
+	List        *tview.List
 	songs       []Song
 	updateTitle func()
 	currentIdx  int
@@ -14,6 +15,7 @@ type Playlist struct {
 	mode        PlayMode
 	name        string
 	path        string
+	isModified  bool
 }
 
 func NewPlaylist(info PlaylistInfo) *Playlist {
@@ -21,8 +23,14 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		return &Playlist{}
 	}
 	list := tview.NewList()
+	emptyPlaylistText := tview.NewTextView().SetText("empty playlist").
+		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
+	pages := tview.NewPages().
+		AddPage("playlist", list, true, true).
+		AddPage("empty_playlist", emptyPlaylistText, true, false)
 
 	playlist := &Playlist{
+		Pages: pages,
 		List:  list,
 		mode:  DefaultMode,
 		songs: info.Songs(),
@@ -30,26 +38,25 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		path:  info.Path(),
 	}
 
-
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
-					case 'j':
-						return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-					case 'k':
-						return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-					}
-			return nil
+		case 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return nil
 	})
-	
+
 	playlist.InsertAll()
 
-	playlist.
-	SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-	ShowSecondaryText(false).
-	SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(tcell.ColorDefault)).
-	SetHighlightFullLine(true).
-	SetWrapAround(false).
-	SetBackgroundColor(thunder.Colors.Background)
+	playlist.List.
+		SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
+		ShowSecondaryText(false).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(tcell.ColorDefault)).
+		SetHighlightFullLine(true).
+		SetWrapAround(false).
+		SetBackgroundColor(thunder.Colors.Background)
 
 	return playlist
 }
@@ -57,6 +64,8 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 func (p *Playlist) Insert(song Song) {
 	p.List.InsertItem(len(p.songs), song.Name(), "", 0, nil)
 	p.songs = append(p.songs, song)
+	p.Update()
+	p.SetIsModified(true)
 }
 
 func (p *Playlist) Remove(i int) {
@@ -99,7 +108,6 @@ func (p *Playlist) UpdateTitle() {
 	p.updateTitle()
 }
 
-
 func (p *Playlist) Get(i int) Song {
 	if i < 0 || i >= len(p.songs) {
 		return nil
@@ -109,11 +117,29 @@ func (p *Playlist) Get(i int) Song {
 }
 
 func (p *Playlist) Play(i int) {
-  //TODO
+	//TODO
 }
 
 func (p *Playlist) InsertAll() {
 	for i, song := range p.songs {
 		p.List.InsertItem(i, song.Name(), "", 0, nil)
 	}
+	p.CheckIsEmpty()
+}
+
+func (p *Playlist) CheckIsEmpty() {
+	if len(p.songs) == 0 {
+		p.SwitchToPage("empty_playlist")
+	} else {
+		p.SwitchToPage("playlist")
+	}
+}
+
+func (p *Playlist) Update() {
+	p.CheckIsEmpty()
+	p.UpdateTitle()
+}
+
+func (p *Playlist) SetIsModified(modified bool) {
+	p.isModified = modified
 }

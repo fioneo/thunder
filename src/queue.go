@@ -1,12 +1,13 @@
 package main
 
 import (
-	"github.com/rivo/tview"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 type Queue struct {
-	*tview.List
+	*tview.Pages
+	List        *tview.List
 	updateTitle func()
 	mode        PlayMode
 	songs       []Song
@@ -16,33 +17,42 @@ type Queue struct {
 
 func NewQueue(songs []Song) *Queue {
 	list := tview.NewList()
-	
+	emptyQueueText := tview.NewTextView().SetText("empty queue").
+		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
+	pages := tview.NewPages().
+		AddPage("playlist", list, true, true).
+		AddPage("empty_queue", emptyQueueText, true, false)
+
 	queue := &Queue{
+		Pages: pages,
 		List:  list,
 		mode:  DefaultMode,
 		songs: songs,
 	}
+	if len(songs) == 0 {
+		pages.SwitchToPage("empty_queue")
+	}
 
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
-					case 'j':
-						return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-					case 'k':
-						return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-					}
-			return nil
+		case 'j':
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		}
+		return nil
 	})
-	
+
 	queue.InsertAll()
-	
-	queue.
-	SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-	ShowSecondaryText(false).
-	SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(tcell.ColorDefault)).
-	SetHighlightFullLine(true).
-	SetWrapAround(false).
-	SetBackgroundColor(thunder.Colors.Background)
-	
+
+	queue.List.
+		SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
+		ShowSecondaryText(false).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(tcell.ColorDefault)).
+		SetHighlightFullLine(true).
+		SetWrapAround(false).
+		SetBackgroundColor(thunder.Colors.Background)
+
 	return queue
 }
 
@@ -120,8 +130,7 @@ func (q *Queue) UpdateTitle() {
 	q.updateTitle()
 }
 
-
-func (q *Queue) Play()  {
+func (q *Queue) Play() {
 	// TODO
 }
 

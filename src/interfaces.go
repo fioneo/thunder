@@ -21,3 +21,16 @@ type Panel interface {
 	SetBorderColor(tcell.Color) *tview.Box
 	SetTitleColor(tcell.Color) *tview.Box
 }
+
+type Node interface {
+	IsDir() bool
+	Children() []Node
+	Name() string
+	Path() string
+	Parent() Node
+	SetIsDir(bool)
+	SetChildren([]Node)
+	SetName(string)
+	SetPath(string)
+	SetParent(Node)
+}

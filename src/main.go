@@ -11,7 +11,7 @@ import (
 )
 
 func InitApp(app *tview.Application) {
-	
+
 	thunder = NewThunder()
 	thunder.InitPanels(app)
 	flex := tview.NewFlex().
@@ -19,10 +19,13 @@ func InitApp(app *tview.Application) {
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(thunder.PlayPanel, 0, 7, false).AddItem(thunder.PlayBar, 0, 3, false), 0, 3, false)
 
-	thunder.Pages.AddPage("main",flex,true,true)
-	thunder.App.SetRoot(flex,true).SetFocus(thunder.Library)
+	thunder.Pages.AddPage("main", flex, true, true)
+	thunder.App.SetRoot(thunder.Pages, true).SetFocus(thunder.Library)
 
 	app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		if thunder.Pages.HasPage("confirmation_popup") {
+			return e
+		}
 		if e.Key() == tcell.KeyTab {
 			thunder.CyclePanels()
 		}
@@ -31,10 +34,10 @@ func InitApp(app *tview.Application) {
 }
 
 func main() {
-			
+
 	app := tview.NewApplication()
 	InitApp(app)
-	
+
 	if err := app.Run(); err != nil {
 		exit(err)
 	}

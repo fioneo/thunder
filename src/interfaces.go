@@ -22,15 +22,8 @@ type Panel interface {
 	SetTitleColor(tcell.Color) *tview.Box
 }
 
-type Node interface {
+type File interface {
 	IsDir() bool
-	Children() []Node
 	Name() string
 	Path() string
-	Parent() Node
-	SetIsDir(bool)
-	SetChildren([]Node)
-	SetName(string)
-	SetPath(string)
-	SetParent(Node)
 }

@@ -1,144 +1,139 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"os"
 	"path/filepath"
 )
 
+type SelectionMode int
+
+const (
+	DefaultSelection SelectionMode = iota
+	MultiplySelection
+)
+
 var allowedExt = ".mp3"
 
 type Library struct {
-	*tview.TreeView
-	root        Node
-	currentNode Node
+	*List
+	files       []File
+	currentPath string
+	currentIdx  int
+	idxHistory  map[string]int
+	mode        SelectionMode
+	selected    []int
 }
 
 func NewLibrary(dir string) *Library {
-	rootPath := filepath.Join(dir, "Music")
-	root := tview.NewTreeNode("Music").
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Playlist).
-			Background(thunder.Colors.Background)).SetSelectable(false)
-
-	rootNode := NewNode()
-
-	tree := tview.NewTreeView().SetRoot(root).SetCurrentNode(root)
+	path := filepath.Join(dir, "Music/playlists")
+	list := NewList()
 
 	library := &Library{
-		TreeView: tree,
-		root:     rootNode,
+		List:        list,
+		currentPath: path,
+		mode:        DefaultSelection,
+		idxHistory:  make(map[string]int),
 	}
+	library.readDir(path)
+	library.UpdateInfo()
 
-	library.addNode(root, rootNode, rootPath)
+	// library.SetSelectedFunc(func(idx int, _ string) {
+	// 	library.currentIdx = idx
+	// })
 
-	library.SetSelectedFunc(func(treeNode *tview.TreeNode) {
-		reference := treeNode.GetReference()
-		if reference == nil {
-			return
-		}
-		node := reference.(Node)
-		if !node.IsDir() {
-			return
-		}
-		children := node.Children()
-		if len(children) == 0 {
-			library.addNode(treeNode, node, node.Path())
-		} else {
-			treeNode.SetExpanded(!treeNode.IsExpanded())
-		}
-	})
-
-	library.SetChangedFunc(func(node *tview.TreeNode) {
-		ref := node.GetReference()
-
-		if ref == nil {
-			return
-		}
-
-		library.currentNode = ref.(Node)
-	})
-
-	library.SetBlurFunc(func() {
-		currentNode := library.currentNode
-		currentTreeNode := library.GetCurrentNode()
-		if currentNode != nil {
-			if currentNode.IsDir() {
-				currentTreeNode.SetSelectedTextStyle(
-					tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background),
-				)
-			} else {
-				currentTreeNode.SetSelectedTextStyle(
-					tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background),
-				)
-			}
-		}
-	})
-
-	library.SetFocusFunc(func() {
-		currentNode := library.currentNode
-		currentTreeNode := library.GetCurrentNode()
-		if currentNode != nil {
-			if currentNode.IsDir() {
-				currentTreeNode.SetSelectedTextStyle(
-					tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist),
-				)
-			} else {
-				currentTreeNode.SetSelectedTextStyle(
-					tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song),
-				)
-			}
-		}
+	library.SetChangedFunc(func(idx int, _ string) {
+		library.currentIdx = idx
+		library.UpdateInfo()
 	})
 
 	library.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		if e.Key() == tcell.KeyEscape {
+
+		}
 		switch e.Rune() {
 		// case ' ':
 		// 	return nil
 		case 'l':
-			currentNode := library.currentNode
-
-			if !currentNode.IsDir() {
-				song := nodeToSong(currentNode.Name(), currentNode.Path())
-				thunder.PlayPanel.playlist.Insert(song)
+			// if library.mode == MultiplySelection {
+			// 	if len(library.selected) == 0 {
+			// 		return e
+			// 	}
+			// 	songs := filesToSongs(library.selected)
+			// 	thunder.PlayPanel.playlist.MultiplyInsert(songs)
+			// 	library.mode = DefaultSelection
+			// 	return e
+			// }
+			if len(library.files) == 0 || library.currentIdx >= len(library.files) {
 				return e
 			}
 
-			if library.CheckIsModified() {
-				confirmationPopup("You have unsaved changes.\nAre you sure you want to close this playlist?", func(_ int, label string) {
-					if label == "yes" {
-						playlistInfo := nodeToPlaylistInfo(currentNode.Name(), currentNode.Path(), currentNode.Children())
+			file := library.files[library.currentIdx]
 
-						thunder.PlayPanel.Update(playlistInfo)
-					}
-				})
-			} else {
-				playlistInfo := nodeToPlaylistInfo(currentNode.Name(), currentNode.Path(), currentNode.Children())
-
-				thunder.PlayPanel.Update(playlistInfo)
+			if !file.IsDir() {
+				song := fileToSong(file)
+				thunder.PlayPanel.playlist.Insert(song)
+				return e
 			}
-		case 'n':
-			if library.CheckIsModified() {
-				confirmationPopup("Are you sure?", func(_ int, label string) {
-					if label == "yes" {
-						playlistInfo := NewDefaultPlaylistInfo()
+			library.idxHistory[library.currentPath] = library.currentIdx
+			library.Clear()
+			library.readDir(file.Path())
+		case 'h':
+			path := filepath.Dir(library.currentPath)
 
-						thunder.PlayPanel.Update(playlistInfo)
-					}
-				})
-			} else {
-				playlistInfo := NewDefaultPlaylistInfo()
-
-				thunder.PlayPanel.Update(playlistInfo)
+			library.Clear()
+			if err := library.readDir(path); err != nil {
+				errorPopup(err)
+				return e
 			}
+			if idx, ok := library.idxHistory[path]; ok {
+				if idx < 0 || idx >= len(library.files) {
+					return e
+				}
+				library.currentIdx = idx
+				library.List.SetCurrentIdx(idx)
+			}
+
+			// 			if library.CheckIsModified() {
+			// 				confirmationPopup("You have unsaved changes.\nAre you sure you want to close the current playlist?", func(_ int, label string) {
+			// 					if label == "yes" {
+			// 						playlistInfo := directoryToPlaylistInfo(library.currentDir, library.CurrentPath)
+			//
+			// 						thunder.PlayPanel.UpdateInfo(playlistInfo)
+			// 					}
+			// 				})
+			// 			} else {
+			// 				playlistInfo := directoryToPlaylistInfo(currentNode.Name(), currentNode.Path(), currentNode.Children())
+			//
+			// 				thunder.PlayPanel.UpdateInfo(playlistInfo)
+			// 			}
+			// 		case 'n':
+			// 			if library.CheckIsModified() {
+			// 				confirmationPopup("You have unsaved changes.\nAre you sure you want to create a new playlist?", func(_ int, label string) {
+			// 					if label == "yes" {
+			// 						playlistInfo := NewDefaultPlaylistInfo()
+			//
+			// 						thunder.PlayPanel.UpdateInfo(playlistInfo)
+			// 					}
+			// 				})
+			// 			} else {
+			// 				playlistInfo := NewDefaultPlaylistInfo()
+			//
+			// 				thunder.PlayPanel.UpdateInfo(playlistInfo)
+			// 			}
 		}
-
 		return e
 	})
 
 	library.
+		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
+		SetHighlightFullLine(true).
+		SetSelectedFocusOnly(true).
+		SetWrapAround(false).
 		SetBorder(true).
-		SetTitle("Library").
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(thunder.Colors.Accent).
 		SetTitleColor(thunder.Colors.Accent).
@@ -148,14 +143,14 @@ func NewLibrary(dir string) *Library {
 	return library
 }
 
-func (l *Library) addNode(treeParent *tview.TreeNode, modelParent Node, path string) {
+func (l *Library) readDir(path string) error {
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
-		exit(err)
+		return err
 	}
-
-	children := make([]Node, 0, len(dirEntries))
-
+	l.currentPath = path
+	files := make([]File, 0, len(dirEntries))
+	i := 0
 	for _, entry := range dirEntries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) != allowedExt {
 			continue
@@ -163,34 +158,61 @@ func (l *Library) addNode(treeParent *tview.TreeNode, modelParent Node, path str
 		path := filepath.Join(path, entry.Name())
 		name := entry.Name()
 
-		childrenNode := NewNode()
-		childrenNode.SetIsDir(entry.IsDir())
-		childrenNode.SetName(name)
-		childrenNode.SetPath(path)
-		childrenNode.SetParent(modelParent)
+		file := NewFile(name, path, entry.IsDir())
 
-		children = append(children, childrenNode)
+		files = append(files, file)
 
-		style := tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)
-		selectedStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)
-
-		treeNode := tview.NewTreeNode(entry.Name()).
-			SetReference(path)
+		style := l.songStyle()
+		selectedStyle := l.songSelectedStyle()
 
 		if entry.IsDir() {
-			style = tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)
-			selectedStyle = tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist)
+			style = l.playlistStyle()
+			selectedStyle = l.playlistSelectedStyle()
 		}
 
-		treeNode.SetTextStyle(style)
-		treeNode.SetSelectedTextStyle(selectedStyle)
-		treeNode.SetReference(childrenNode)
-		treeParent.AddChild(treeNode)
+		l.List.InsertItem(i, name, &style, &selectedStyle)
+		i++
 	}
+	l.files = files
+	l.UpdateInfo()
 
-	modelParent.SetChildren(children)
+	return nil
+}
+
+func (l *Library) Clear() {
+	l.currentIdx = 0
+	l.List.Clear()
+	l.files = nil
+}
+
+func (l *Library) UpdateInfo() {
+	idx := l.currentIdx
+	if len(l.files) > 0 {
+		idx++
+	}
+	title := fmt.Sprintf("─ %s ──┤ %d / %d ├",
+		"Library",
+		idx,
+		len(l.files))
+	l.SetTitle(title)
 }
 
 func (l *Library) CheckIsModified() bool {
 	return thunder.PlayPanel.playlist.isModified
+}
+
+func (l *Library) songStyle() tcell.Style {
+	return tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)
+}
+
+func (l *Library) songSelectedStyle() tcell.Style {
+	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)
+}
+
+func (l *Library) playlistStyle() tcell.Style {
+	return tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)
+}
+
+func (l *Library) playlistSelectedStyle() tcell.Style {
+	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist)
 }

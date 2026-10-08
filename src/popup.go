@@ -11,8 +11,8 @@ func confirmationPopup(text string, handler func(int, string)) {
 		SetText(text).
 		SetBackgroundColor(thunder.Colors.Background).
 		AddButtons([]string{"no", "yes"}).
-		SetButtonBackgroundColor(thunder.Colors.Background).
-		SetButtonTextColor(thunder.Colors.Accent)
+		SetButtonStyle(tcell.StyleDefault.Foreground(thunder.Colors.Accent).Background(thunder.Colors.Background)).
+		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
 
 	modal.SetDoneFunc(func(indx int, label string) {
 		thunder.Pages.RemovePage("confirmation_popup")
@@ -46,6 +46,7 @@ func errorPopup(err error) {
 		SetTextColor(tcell.ColorRed).
 		SetBackgroundColor(thunder.Colors.Background).
 		AddButtons([]string{"ok"}).
+		SetButtonTextColor(tcell.ColorBlack).
 		SetButtonBackgroundColor(thunder.Colors.Background).
 		SetButtonTextColor(tcell.ColorRed).
 		SetBackgroundColor(thunder.Colors.Background)

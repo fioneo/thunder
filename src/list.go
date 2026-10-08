@@ -16,6 +16,8 @@ type List struct {
 
 	items []*listItem
 
+	selectedItems []*listItem
+
 	currentIdx int
 
 	textStyle tcell.Style
@@ -45,9 +47,18 @@ func NewList() *List {
 	}
 }
 
+func (l *List) GrowCap(capacity int) *List {
+	l.items = make([]*listItem, 0, capacity)
+	return l
+}
+
 func (l *List) SetItemOffset(items int) *List {
 	l.itemOffset = items
 	return l
+}
+
+func (l *List) GetItemOffset() int {
+	return l.itemOffset
 }
 
 func (l *List) SetCurrentIdx(idx int) *List {
@@ -113,10 +124,10 @@ func (l *List) InsertItem(idx int, text string, style, selectedStyle *tcell.Styl
 	}
 	l.items[idx] = item
 
-	// if len(l.items) == 1 && l.changed != nil {
-	// 	item := l.items[0]
-	// 	l.changed(0, item.MainText, item.SecondaryText, item.Shortcut)
-	// }
+	if len(l.items) == 1 && l.changed != nil {
+		item := l.items[0]
+		l.changed(0, item.text)
+	}
 
 	return l
 
@@ -287,6 +298,10 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 			l.currentIdx++
 		case 'k':
 			l.currentIdx--
+		case 'g':
+			l.currentIdx = 0
+		case 'G':
+			l.currentIdx = len(l.items) - 1
 		}
 
 		if l.currentIdx < 0 {

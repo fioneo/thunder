@@ -18,9 +18,11 @@ const (
 var allowedExt = ".mp3"
 
 type Library struct {
-	*List
+	*tview.Frame
+	List        *List
 	files       []File
 	currentPath string
+	currentDir  string
 	currentIdx  int
 	idxHistory  map[string]int
 	mode        SelectionMode
@@ -29,30 +31,28 @@ type Library struct {
 
 func NewLibrary(dir string) *Library {
 	path := filepath.Join(dir, "Music/playlists")
+
 	list := NewList()
+	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
 
 	library := &Library{
+		Frame:       frame,
 		List:        list,
 		currentPath: path,
 		mode:        DefaultSelection,
 		idxHistory:  make(map[string]int),
 	}
-	library.readDir(path)
-	library.UpdateInfo()
 
-	// library.SetSelectedFunc(func(idx int, _ string) {
-	// 	library.currentIdx = idx
-	// })
+	if err := library.readDir(path); err != nil {
+		exit(err)
+	}
 
-	library.SetChangedFunc(func(idx int, _ string) {
+	library.List.SetChangedFunc(func(idx int, _ string) {
 		library.currentIdx = idx
 		library.UpdateInfo()
 	})
 
 	library.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if e.Key() == tcell.KeyEscape {
-
-		}
 		switch e.Rune() {
 		// case ' ':
 		// 	return nil
@@ -66,7 +66,9 @@ func NewLibrary(dir string) *Library {
 			// 	library.mode = DefaultSelection
 			// 	return e
 			// }
-			if len(library.files) == 0 || library.currentIdx >= len(library.files) {
+			if len(library.files) == 0 ||
+				library.currentIdx < 0 ||
+				library.currentIdx >= len(library.files) {
 				return e
 			}
 
@@ -77,17 +79,23 @@ func NewLibrary(dir string) *Library {
 				thunder.PlayPanel.playlist.Insert(song)
 				return e
 			}
-			library.idxHistory[library.currentPath] = library.currentIdx
-			library.Clear()
-			library.readDir(file.Path())
-		case 'h':
-			path := filepath.Dir(library.currentPath)
+			currentIdx := library.currentIdx
+			currentPath := library.currentPath
+			path := file.Path()
 
-			library.Clear()
 			if err := library.readDir(path); err != nil {
 				errorPopup(err)
 				return e
 			}
+			library.idxHistory[currentPath] = currentIdx
+		case 'h':
+			path := filepath.Dir(library.currentPath)
+
+			if err := library.readDir(path); err != nil {
+				errorPopup(err)
+				return e
+			}
+
 			if idx, ok := library.idxHistory[path]; ok {
 				if idx < 0 || idx >= len(library.files) {
 					return e
@@ -95,6 +103,22 @@ func NewLibrary(dir string) *Library {
 				library.currentIdx = idx
 				library.List.SetCurrentIdx(idx)
 			}
+		case 'd':
+			idx := library.currentIdx
+			if len(library.files) == 0 ||
+				idx < 0 ||
+				idx >= len(library.files) {
+				return e
+			}
+			file := library.files[idx]
+			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current file?", file.Name())
+			confirmationPopup(popupText, func(_ int, label string) {
+				if label == "yes" {
+					if err := library.Remove(idx); err != nil {
+						errorPopup(err)
+					}
+				}
+			})
 
 			// 			if library.CheckIsModified() {
 			// 				confirmationPopup("You have unsaved changes.\nAre you sure you want to close the current playlist?", func(_ int, label string) {
@@ -127,12 +151,15 @@ func NewLibrary(dir string) *Library {
 		return e
 	})
 
-	library.
+	library.List.
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
 		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
 		SetHighlightFullLine(true).
 		SetSelectedFocusOnly(true).
 		SetWrapAround(false).
+		SetBackgroundColor(thunder.Colors.Background)
+
+	library.
 		SetBorder(true).
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(thunder.Colors.Accent).
@@ -148,9 +175,9 @@ func (l *Library) readDir(path string) error {
 	if err != nil {
 		return err
 	}
-	l.currentPath = path
 	files := make([]File, 0, len(dirEntries))
-	i := 0
+	l.Clear()
+	idx := 0
 	for _, entry := range dirEntries {
 		if !entry.IsDir() && filepath.Ext(entry.Name()) != allowedExt {
 			continue
@@ -162,22 +189,48 @@ func (l *Library) readDir(path string) error {
 
 		files = append(files, file)
 
-		style := l.songStyle()
-		selectedStyle := l.songSelectedStyle()
-
-		if entry.IsDir() {
-			style = l.playlistStyle()
-			selectedStyle = l.playlistSelectedStyle()
-		}
-
-		l.List.InsertItem(i, name, &style, &selectedStyle)
-		i++
+		style, selectedStyle := l.GetStyle(file)
+		l.List.InsertItem(idx, file.Name(), style, selectedStyle)
+		idx++
 	}
+
 	l.files = files
+	l.UpdateInfo()
+	l.currentPath = path
+	l.currentDir = filepath.Base(path)
+	l.Frame.Clear()
+	dir := l.currentDir
+	if l.currentDir != "/" {
+		dir += "/"
+	}
+	l.Frame.AddText(dir, true, tview.AlignLeft, tcell.ColorGreen)
+
+	return nil
+}
+
+func (l *Library) Remove(idx int) error {
+	file := l.files[idx]
+	if err := os.Remove(file.Path()); err != nil {
+		return err
+	}
+
+	l.List.RemoveItem(idx)
+	l.files = append(l.files[:idx], l.files[idx+1:]...)
+
+	if len(l.files) == 0 {
+		return nil
+	}
+
+	if l.currentIdx > idx || l.currentIdx == len(l.files) {
+		l.currentIdx--
+	}
+
 	l.UpdateInfo()
 
 	return nil
 }
+
+// func (l *Library) RemoveAll() {}
 
 func (l *Library) Clear() {
 	l.currentIdx = 0
@@ -195,10 +248,32 @@ func (l *Library) UpdateInfo() {
 		idx,
 		len(l.files))
 	l.SetTitle(title)
+
+	// l.CheckIsEmpty()
 }
 
 func (l *Library) CheckIsModified() bool {
 	return thunder.PlayPanel.playlist.isModified
+}
+
+// func (l *Library) CheckIsEmpty() {
+// 	if len(l.files) == 0 {
+// 		l.SwitchToPage("empty_playlist")
+// 	} else {
+// 		l.SwitchToPage("playlist")
+// 	}
+// }
+
+func (l *Library) GetStyle(file File) (*tcell.Style, *tcell.Style) {
+	style := l.songStyle()
+	selectedStyle := l.songSelectedStyle()
+
+	if file.IsDir() {
+		style = l.playlistStyle()
+		selectedStyle = l.playlistSelectedStyle()
+	}
+
+	return &style, &selectedStyle
 }
 
 func (l *Library) songStyle() tcell.Style {

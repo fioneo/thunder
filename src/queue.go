@@ -7,7 +7,7 @@ import (
 
 type Queue struct {
 	*tview.Pages
-	List        *tview.List
+	List        *List
 	updateTitle func()
 	mode        PlayMode
 	songs       []Song
@@ -16,7 +16,7 @@ type Queue struct {
 }
 
 func NewQueue(songs []Song) *Queue {
-	list := tview.NewList()
+	list := NewList()
 	emptyQueueText := tview.NewTextView().SetText("empty queue").
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
 	pages := tview.NewPages().
@@ -47,8 +47,7 @@ func NewQueue(songs []Song) *Queue {
 
 	queue.List.
 		SetSelectedFocusOnly(true).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-		ShowSecondaryText(false).
+		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
 		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
 		SetHighlightFullLine(true).
 		SetWrapAround(false).
@@ -60,10 +59,10 @@ func (q *Queue) Length() int {
 	return len(q.songs)
 }
 
-func (q *Queue) Insert(song Song) {
-	q.List.InsertItem(len(q.songs), song.Name(), "", 0, nil)
-	q.songs = append(q.songs, song)
-}
+// func (q *Queue) Insert(song Song) {
+// 	q.List.InsertItem(len(q.songs), song.Name(), "", 0, nil)
+// 	q.songs = append(q.songs, song)
+// }
 
 func (q *Queue) Remove(i int) {
 	if len(q.songs) == 0 {
@@ -136,6 +135,6 @@ func (q *Queue) Play() {
 
 func (q *Queue) InsertAll() {
 	for i, song := range q.songs {
-		q.List.InsertItem(i, song.Name(), "", 0, nil)
+		q.List.InsertItem(i, song.Name(), nil, nil)
 	}
 }

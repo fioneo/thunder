@@ -8,7 +8,7 @@ import (
 
 type Playlist struct {
 	*tview.Pages
-	List        *tview.List
+	List        *List
 	songs       []Song
 	updateTitle func()
 	currentIdx  int
@@ -24,7 +24,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 	if info == nil {
 		return &Playlist{}
 	}
-	list := tview.NewList()
+	list := NewList()
 	emptyPlaylistText := tview.NewTextView().SetText("empty playlist").
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
 	pages := tview.NewPages().
@@ -40,18 +40,28 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		unique: make(map[string]struct{}, len(info.Songs())),
 	}
 
-	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case 'g':
-			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
-		case 'G':
-			return tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone)
+	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		switch e.Rune() {
+		case 'r':
+			idx := playlist.currentIdx
+			if len(playlist.songs) == 0 ||
+				idx < 0 ||
+				idx >= len(playlist.songs) {
+				return e
+			}
+			song := playlist.songs[idx]
+			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current file from playlist?", song.Name())
+			confirmationPopup(popupText, func(_ int, label string) {
+				if label == "yes" {
+					playlist.Remove(idx)
+				}
+			})
 		}
-		return nil
+		return e
+	})
+
+	playlist.List.SetChangedFunc(func(idx int, _ string) {
+		playlist.currentIdx = idx
 	})
 
 	for _, song := range info.Songs() {
@@ -62,8 +72,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 
 	playlist.List.
 		SetSelectedFocusOnly(true).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-		ShowSecondaryText(false).
+		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
 		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
 		SetHighlightFullLine(true).
 		SetWrapAround(false).
@@ -78,24 +87,22 @@ func (p *Playlist) Insert(song Song) {
 			if label == "no" || label == "" {
 				return
 			}
-			p.List.InsertItem(len(p.songs), song.Name(), "", 0, nil)
+			p.List.InsertItem(len(p.songs), song.Name(), nil, nil)
 			p.songs = append(p.songs, song)
 			itemIdx := len(p.songs) - 1
 			p.unique[song.Path()] = struct{}{}
-			p.List.SetCurrentItem(itemIdx)
-			_, horizontalOffset := p.List.GetOffset()
-			p.List.SetOffset(itemIdx, horizontalOffset)
+			p.List.SetCurrentIdx(itemIdx)
+			p.List.SetItemOffset(itemIdx)
 			p.SetIsModified(true)
 			p.UpdateInfo()
 		})
 	} else {
-		p.List.InsertItem(len(p.songs), song.Name(), "", 0, nil)
+		p.List.InsertItem(len(p.songs), song.Name(), nil, nil)
 		p.songs = append(p.songs, song)
 		itemIdx := len(p.songs) - 1
 		p.unique[song.Path()] = struct{}{}
-		p.List.SetCurrentItem(itemIdx)
-		_, horizontalOffset := p.List.GetOffset()
-		p.List.SetOffset(itemIdx, horizontalOffset)
+		p.List.SetCurrentIdx(itemIdx)
+		p.List.SetItemOffset(itemIdx)
 		p.SetIsModified(true)
 		p.UpdateInfo()
 	}
@@ -107,25 +114,29 @@ func (p *Playlist) MultiplyInsert(songs []Song) {
 	}
 }
 
-func (p *Playlist) Remove(i int) {
+func (p *Playlist) Remove(idx int) {
 	if len(p.songs) == 0 {
 		return
 	}
 
-	if i < 0 || i >= len(p.songs) {
+	if idx < 0 || idx >= len(p.songs) {
 		return
 	}
+	song := p.songs[idx]
 
-	p.List.RemoveItem(i)
-	p.songs = append(p.songs[:i], p.songs[i+1:]...)
+	delete(p.unique, song.Path())
+	p.List.RemoveItem(idx)
+	p.songs = append(p.songs[:idx], p.songs[idx+1:]...)
 
-	if i == len(p.songs) {
+	if p.currentIdx > idx || p.currentIdx == len(p.songs) {
 		p.currentIdx--
 	}
+
 	p.UpdateInfo()
+
 }
 
-func (p *Playlist) MultiplyRemove(indexes []int) {
+func (p *Playlist) RemoveAll(indexes []int) {
 	for i, _ := range indexes {
 		p.Remove(i)
 	}

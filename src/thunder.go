@@ -15,8 +15,9 @@ type Thunder struct {
 	PlayPanel       *PlayPanel
 	PlayBar         *PlayBar
 	Player          *Player
-	Colors          *Colors
 	Panels          []Panel
+	Popups          *PopupQueue
+	Colors          *Colors
 	CurrentPanelIdx int
 }
 
@@ -33,6 +34,7 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	t.Pages = tview.NewPages()
 	t.App = app
 	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
+	t.Popups = NewPopupQueue()
 }
 
 func NewThunder() *Thunder {

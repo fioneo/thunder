@@ -1,12 +1,81 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"sync/atomic"
 )
 
-func confirmationPopup(text string, handler func(int, string)) {
+var (
+	popupCount atomic.Uint32
+)
+
+type popupEntry struct {
+	panel Panel
+	page  string
+}
+
+type PopupQueue struct {
+	popups []popupEntry
+}
+
+func NewPopupQueue() *PopupQueue {
+	return &PopupQueue{}
+}
+
+func (q *PopupQueue) Enqueue(popup tview.Primitive, page string) {
+	panel, ok := popup.(Panel)
+	if !ok {
+		return
+	}
+
+	q.popups = append(q.popups, popupEntry{
+		panel: panel,
+		page:  page,
+	})
+	popupCount.Add(1)
+
+	if q.Length() == 1 {
+		q.Next()
+	}
+
+}
+
+func (q *PopupQueue) Next() {
+	if q.Length() == 0 {
+		thunder.App.SetFocus(thunder.Panels[thunder.CurrentPanelIdx].(tview.Primitive))
+		return
+	}
+
 	currentPanel := thunder.Panels[thunder.CurrentPanelIdx]
+	next := q.popups[0]
+
+	thunder.SetFocusPanel(currentPanel, next.panel)
+	thunder.Pages.ShowPage(next.page)
+}
+
+func (q *PopupQueue) DismissCurrent() {
+	if q.Length() == 0 {
+		return
+	}
+
+	popup := q.popups[0]
+	thunder.Pages.RemovePage(popup.page)
+
+	thunder.App.SetFocus(popup.panel.(tview.Primitive))
+
+	q.popups = q.popups[1:]
+	q.Next()
+}
+
+func (q *PopupQueue) Length() int {
+	return len(q.popups)
+}
+
+func confirmationPopup(text string, handler func(int, string)) {
+	page := fmt.Sprintf("confirmation_popup-%d", popupCount.Load())
+
 	modal := tview.NewModal().
 		SetText(text).
 		SetBackgroundColor(thunder.Colors.Background).
@@ -15,8 +84,7 @@ func confirmationPopup(text string, handler func(int, string)) {
 		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
 
 	modal.SetDoneFunc(func(indx int, label string) {
-		thunder.Pages.RemovePage("confirmation_popup")
-		thunder.SetFocusPanel(modal, currentPanel)
+		thunder.Popups.DismissCurrent()
 		handler(indx, label)
 	})
 
@@ -36,11 +104,12 @@ func confirmationPopup(text string, handler func(int, string)) {
 		return e
 	})
 
-	thunder.Pages.AddPage("confirmation_popup", modal, true, true)
-	thunder.SetFocusPanel(currentPanel, modal)
+	thunder.Pages.AddPage(page, modal, true, false)
+	thunder.Popups.Enqueue(modal, page)
 }
 func errorPopup(err error) {
-	currentPanel := thunder.Panels[thunder.CurrentPanelIdx]
+	page := fmt.Sprintf("error_popup-%d", popupCount.Load())
+
 	modal := tview.NewModal().
 		SetText(err.Error()).
 		SetTextColor(tcell.ColorRed).
@@ -51,9 +120,8 @@ func errorPopup(err error) {
 		SetButtonTextColor(tcell.ColorRed).
 		SetBackgroundColor(thunder.Colors.Background)
 
-	modal.SetDoneFunc(func(indx int, label string) {
-		thunder.Pages.RemovePage("error_popup")
-		thunder.SetFocusPanel(modal, currentPanel)
+	modal.SetDoneFunc(func(_ int, _ string) {
+		thunder.Popups.DismissCurrent()
 	})
 
 	modal.SetBorderColor(thunder.Colors.Accent).
@@ -72,7 +140,5 @@ func errorPopup(err error) {
 		return e
 	})
 
-	thunder.Pages.AddPage("error_popup", modal, true, true)
-	thunder.SetFocusPanel(currentPanel, modal)
-	modal.SetBorderColor(tcell.ColorRed)
+	thunder.Popups.Enqueue(modal, page)
 }

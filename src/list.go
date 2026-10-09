@@ -5,7 +5,50 @@ import (
 	"github.com/rivo/tview"
 )
 
+type Selectable interface {
+	Path() string
+}
+
+type Selection struct {
+	items []Selectable
+	set   map[string]struct{}
+}
+
+func NewSelection() *Selection {
+	return &Selection{
+		set: make(map[string]struct{}),
+	}
+}
+
+func (s *Selection) Exist(item Selectable) bool {
+	_, ok := s.set[item.Path()]
+	return ok
+}
+
+func (s *Selection) Clear() {
+	s.items = nil
+	s.set = make(map[string]struct{})
+}
+
+func (s *Selection) Toggle(item Selectable) {
+	if s.Exist(item) {
+		delete(s.set, item.Path())
+
+		for idx, i := range s.items {
+			if i.Path() == item.Path() {
+				s.items = append(s.items[:idx], s.items[idx+1:]...)
+				break
+			}
+		}
+		return
+	}
+
+	s.set[item.Path()] = struct{}{}
+	s.items = append(s.items, item)
+}
+
 type listItem struct {
+	item          Selectable
 	text          string
 	style         *tcell.Style
 	selectedStyle *tcell.Style
@@ -16,15 +59,15 @@ type List struct {
 
 	items []*listItem
 
-	selectedItems []*listItem
+	selection *Selection
 
 	currentIdx int
 
 	textStyle tcell.Style
 
-	selectedTextStyle tcell.Style
+	currentItemStyle tcell.Style
 
-	multiplySelectionStyle tcell.Style
+	selectedStyle tcell.Style
 
 	selectedFocusOnly bool
 
@@ -38,16 +81,18 @@ type List struct {
 
 	changed func(index int, text string)
 
-	selected func(index int, text string)
+	selected func(idx int, selected bool)
 }
 
 func NewList() *List {
 	return &List{
-		Box: tview.NewBox(),
+		Box:       tview.NewBox(),
+		selection: NewSelection(),
 	}
 }
 
 func (l *List) GrowCap(capacity int) *List {
+	l.Clear()
 	l.items = make([]*listItem, 0, capacity)
 	return l
 }
@@ -93,13 +138,14 @@ func (l *List) SetChangedFunc(handler func(idx int, text string)) *List {
 	return l
 }
 
-func (l *List) SetSelectedFunc(handler func(idx int, text string)) *List {
+func (l *List) SetSelectedFunc(handler func(idx int, selected bool)) *List {
 	l.selected = handler
 	return l
 }
 
-func (l *List) InsertItem(idx int, text string, style, selectedStyle *tcell.Style) *List {
-	item := &listItem{
+func (l *List) InsertItem(idx int, item Selectable, text string, style, selectedStyle *tcell.Style) *List {
+	listItem := &listItem{
+		item:          item,
 		text:          text,
 		style:         style,
 		selectedStyle: selectedStyle,
@@ -122,7 +168,7 @@ func (l *List) InsertItem(idx int, text string, style, selectedStyle *tcell.Styl
 	if idx < len(l.items)-1 {
 		copy(l.items[idx+1:], l.items[idx:])
 	}
-	l.items[idx] = item
+	l.items[idx] = listItem
 
 	if len(l.items) == 1 && l.changed != nil {
 		item := l.items[0]
@@ -173,9 +219,14 @@ func (l *List) GetItemCount() int {
 }
 
 func (l *List) Clear() *List {
+	l.selection.Clear()
 	l.items = nil
 	l.currentIdx = 0
 	return l
+}
+
+func (l *List) ClearSelected() {
+	l.selection.Clear()
 }
 
 func (l *List) adjustOffset() {
@@ -199,14 +250,14 @@ func (l *List) SetTextStyle(style tcell.Style) *List {
 	return l
 }
 
-func (l *List) SetSelectedStyle(style tcell.Style) *List {
-	l.selectedTextStyle = style
+func (l *List) SetCurrentItemStyle(style tcell.Style) *List {
+	l.currentItemStyle = style
 	return l
 
 }
 
-func (l *List) SetMultiplySelectionStyle(style tcell.Style) *List {
-	l.multiplySelectionStyle = style
+func (l *List) SetSelectedStyle(style tcell.Style) *List {
+	l.selectedStyle = style
 	return l
 }
 
@@ -240,7 +291,7 @@ func (l *List) Draw(screen tcell.Screen) {
 	}
 
 	var maxWidth int
-	for index, item := range l.items {
+	for index, listItem := range l.items {
 		if index < l.itemOffset {
 			continue
 		}
@@ -249,26 +300,30 @@ func (l *List) Draw(screen tcell.Screen) {
 			break
 		}
 
-		selected := index == l.currentIdx && (!l.selectedFocusOnly || l.HasFocus())
+		current := index == l.currentIdx && (!l.selectedFocusOnly || l.HasFocus())
 		style := l.textStyle
-		if item.style != nil {
-			style = *item.style
+		if listItem.style != nil {
+			style = *listItem.style
 		}
-		if selected {
-			if item.selectedStyle != nil {
-				style = *item.selectedStyle
+
+		selectedStyle := l.selectedStyle
+		selected := l.selection.Exist(listItem.item)
+
+		if current {
+			if listItem.selectedStyle != nil {
+				style = *listItem.selectedStyle
 			} else {
-				style = l.selectedTextStyle
+				style = l.currentItemStyle
 			}
 		}
 
-		text := item.text
-		_, _, printedWidth := printWithStyle(screen, text, x, y, l.horizontalOffset, width, style, false)
+		text := listItem.text
+		_, _, printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, false)
 		if printedWidth > maxWidth {
 			maxWidth = printedWidth
 		}
 
-		if selected && l.highlightFullLine {
+		if (current || selected) && l.highlightFullLine {
 			for bx := printedWidth; bx < width; bx++ {
 				screen.SetContent(x+bx, y, ' ', nil, style)
 			}
@@ -291,7 +346,12 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 		if len(l.items) == 0 {
 			return
 		}
+		if l.currentIdx < 0 ||
+			l.currentIdx >= len(l.items) {
+			return
+		}
 		previousIdx := l.currentIdx
+		listItem := l.items[l.currentIdx]
 
 		switch e.Rune() {
 		case 'j':
@@ -302,6 +362,24 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 			l.currentIdx = 0
 		case 'G':
 			l.currentIdx = len(l.items) - 1
+		case 's':
+			l.selection.Toggle(listItem.item)
+			if l.selected != nil {
+				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
+			}
+		case 'J':
+			l.selection.Toggle(listItem.item)
+			if l.selected != nil {
+				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
+			}
+			l.currentIdx++
+		case 'K':
+			l.selection.Toggle(listItem.item)
+			if l.selected != nil {
+				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
+			}
+			l.currentIdx--
+
 		}
 
 		if l.currentIdx < 0 {
@@ -312,8 +390,7 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 
 		if l.currentIdx != previousIdx && l.currentIdx < len(l.items) {
 			if l.changed != nil {
-				item := l.items[l.currentIdx]
-				l.changed(l.currentIdx, item.text)
+				l.changed(l.currentIdx, listItem.text)
 			}
 			l.adjustOffset()
 		}

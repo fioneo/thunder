@@ -72,7 +72,6 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 	playpanel.SetBorder(true).
 		SetBorderColor(thunder.Colors.Foreground).
 		SetTitleColor(thunder.Colors.Foreground).
-		SetBorderPadding(0, 0, 1, 1).
 		SetBackgroundColor(thunder.Colors.Background)
 
 	playpanel.playlist.UpdateTitle()

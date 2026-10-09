@@ -10,7 +10,7 @@ type Playlist struct {
 	*tview.Pages
 	List        *List
 	songs       []Song
-	updateTitle func()
+	selected    []Song
 	currentIdx  int
 	currentSong int
 	mode        PlayMode
@@ -18,6 +18,7 @@ type Playlist struct {
 	path        string
 	isModified  bool
 	unique      map[string]struct{}
+	updateTitle func()
 }
 
 func NewPlaylist(info PlaylistInfo) *Playlist {
@@ -25,7 +26,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		return &Playlist{}
 	}
 	list := NewList()
-	emptyPlaylistText := tview.NewTextView().SetText("empty playlist").
+	emptyPlaylistText := tview.NewTextView().SetText(" empty playlist").
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
 	pages := tview.NewPages().
 		AddPage("playlist", list, true, true).
@@ -41,6 +42,9 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 	}
 
 	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		if e.Key() == tcell.KeyEscape {
+			playlist.ClearSelected()
+		}
 		switch e.Rune() {
 		case 'r':
 			idx := playlist.currentIdx
@@ -62,18 +66,38 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 
 	playlist.List.SetChangedFunc(func(idx int, _ string) {
 		playlist.currentIdx = idx
+		playlist.UpdateInfo()
 	})
 
-	for _, song := range info.Songs() {
-		playlist.Insert(song)
+	playlist.List.SetSelectedFunc(func(idx int, selected bool) {
+		song := playlist.songs[idx]
+
+		if selected {
+			playlist.selected = append(playlist.selected, song)
+			return
+		}
+
+		for idx, s := range playlist.selected {
+			if s.Path() == song.Path() {
+				playlist.selected = append(playlist.selected[:idx], playlist.selected[idx+1:]...)
+				break
+			}
+		}
+	})
+
+	for i, song := range info.Songs() {
+		playlist.List.InsertItem(i, song, song.Name(), nil, nil)
+		playlist.songs = append(playlist.songs, song)
+		playlist.unique[song.Path()] = struct{}{}
 	}
 
 	playlist.UpdateInfo()
 
 	playlist.List.
-		SetSelectedFocusOnly(true).
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
+		SetSelectedFocusOnly(true).
+		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorGreen)).
 		SetHighlightFullLine(true).
 		SetWrapAround(false).
 		SetBackgroundColor(thunder.Colors.Background)
@@ -81,34 +105,34 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 }
 
 func (p *Playlist) Insert(song Song) {
-	if _, ok := p.unique[song.Path()]; ok {
-		popupText := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.\nDo you want to add it again?", song.Name())
-		confirmationPopup(popupText, func(_ int, label string) {
-			if label == "no" || label == "" {
-				return
-			}
-			p.List.InsertItem(len(p.songs), song.Name(), nil, nil)
-			p.songs = append(p.songs, song)
-			itemIdx := len(p.songs) - 1
-			p.unique[song.Path()] = struct{}{}
-			p.List.SetCurrentIdx(itemIdx)
-			p.List.SetItemOffset(itemIdx)
-			p.SetIsModified(true)
-			p.UpdateInfo()
-		})
-	} else {
-		p.List.InsertItem(len(p.songs), song.Name(), nil, nil)
-		p.songs = append(p.songs, song)
-		itemIdx := len(p.songs) - 1
-		p.unique[song.Path()] = struct{}{}
-		p.List.SetCurrentIdx(itemIdx)
-		p.List.SetItemOffset(itemIdx)
-		p.SetIsModified(true)
-		p.UpdateInfo()
+	if _, ok := p.unique[song.Path()]; !ok {
+		p.add(song)
+		return
 	}
+
+	text := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.\nDo you want to add it again?", song.Name())
+
+	confirmationPopup(text, func(_ int, label string) {
+		if label == "yes" {
+			p.add(song)
+		}
+	})
 }
 
-func (p *Playlist) MultiplyInsert(songs []Song) {
+func (p *Playlist) add(song Song) {
+	itemIdx := len(p.songs)
+
+	p.List.InsertItem(itemIdx, song, song.Name(), nil, nil)
+	p.songs = append(p.songs, song)
+	p.unique[song.Path()] = struct{}{}
+
+	p.List.SetCurrentIdx(itemIdx)
+	p.List.SetItemOffset(itemIdx)
+	p.SetIsModified(true)
+	p.UpdateInfo()
+}
+
+func (p *Playlist) InsertAll(songs []Song) {
 	for _, song := range songs {
 		p.Insert(song)
 	}
@@ -157,8 +181,13 @@ func (p *Playlist) SwitchMode() {
 	}
 }
 
-func (p *Playlist) SetUpdateTitleFunc(deligate func()) {
-	p.updateTitle = deligate
+func (p *Playlist) ClearSelected() {
+	p.selected = nil
+	p.List.ClearSelected()
+}
+
+func (p *Playlist) SetUpdateTitleFunc(updateTitleFunc func()) {
+	p.updateTitle = updateTitleFunc
 }
 
 func (p *Playlist) UpdateTitle() {

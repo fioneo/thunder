@@ -47,11 +47,9 @@ func (q *PopupQueue) Next() {
 		thunder.App.SetFocus(thunder.Panels[thunder.CurrentPanelIdx].(tview.Primitive))
 		return
 	}
-
-	currentPanel := thunder.Panels[thunder.CurrentPanelIdx]
 	next := q.popups[0]
 
-	thunder.SetFocusPanel(currentPanel, next.panel)
+	thunder.App.SetFocus(next.panel.(tview.Primitive))
 	thunder.Pages.ShowPage(next.page)
 }
 
@@ -115,16 +113,14 @@ func errorPopup(err error) {
 		SetTextColor(tcell.ColorRed).
 		SetBackgroundColor(thunder.Colors.Background).
 		AddButtons([]string{"ok"}).
-		SetButtonTextColor(tcell.ColorBlack).
-		SetButtonBackgroundColor(thunder.Colors.Background).
-		SetButtonTextColor(tcell.ColorRed).
-		SetBackgroundColor(thunder.Colors.Background)
+		SetButtonStyle(tcell.StyleDefault.Foreground(thunder.Colors.Accent).Background(thunder.Colors.Background)).
+		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
 
 	modal.SetDoneFunc(func(_ int, _ string) {
 		thunder.Popups.DismissCurrent()
 	})
 
-	modal.SetBorderColor(thunder.Colors.Accent).
+	modal.SetBorderColor(tcell.ColorRed).
 		SetBackgroundColor(thunder.Colors.Background)
 
 	modal.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
@@ -140,5 +136,6 @@ func errorPopup(err error) {
 		return e
 	})
 
+	thunder.Pages.AddPage(page, modal, true, false)
 	thunder.Popups.Enqueue(modal, page)
 }

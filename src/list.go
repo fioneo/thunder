@@ -10,8 +10,7 @@ type Selectable interface {
 }
 
 type Selection struct {
-	items []Selectable
-	set   map[string]struct{}
+	set map[string]struct{}
 }
 
 func NewSelection() *Selection {
@@ -20,31 +19,26 @@ func NewSelection() *Selection {
 	}
 }
 
+func (s *Selection) Add(item Selectable) {
+
+}
+
 func (s *Selection) Exist(item Selectable) bool {
 	_, ok := s.set[item.Path()]
 	return ok
 }
 
 func (s *Selection) Clear() {
-	s.items = nil
 	s.set = make(map[string]struct{})
 }
 
 func (s *Selection) Toggle(item Selectable) {
 	if s.Exist(item) {
 		delete(s.set, item.Path())
-
-		for idx, i := range s.items {
-			if i.Path() == item.Path() {
-				s.items = append(s.items[:idx], s.items[idx+1:]...)
-				break
-			}
-		}
 		return
 	}
 
 	s.set[item.Path()] = struct{}{}
-	s.items = append(s.items, item)
 }
 
 type listItem struct {
@@ -52,6 +46,7 @@ type listItem struct {
 	text          string
 	style         *tcell.Style
 	selectedStyle *tcell.Style
+	highlight     bool
 }
 
 type List struct {
@@ -91,7 +86,7 @@ func NewList() *List {
 	}
 }
 
-func (l *List) GrowCap(capacity int) *List {
+func (l *List) Grow(capacity int) *List {
 	l.Clear()
 	l.items = make([]*listItem, 0, capacity)
 	return l
@@ -379,7 +374,6 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
 			}
 			l.currentIdx--
-
 		}
 
 		if l.currentIdx < 0 {

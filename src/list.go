@@ -10,7 +10,8 @@ type Selectable interface {
 }
 
 type Selection struct {
-	set map[string]struct{}
+	items []Selectable
+	set   map[string]struct{}
 }
 
 func NewSelection() *Selection {
@@ -20,7 +21,24 @@ func NewSelection() *Selection {
 }
 
 func (s *Selection) Add(item Selectable) {
+	if !s.Exist(item) {
+		s.items = append(s.items, item)
+		s.set[item.Path()] = struct{}{}
+	}
+}
 
+func (s *Selection) Remove(item Selectable) {
+	delete(s.set, item.Path())
+	for idx, i := range s.items {
+		if i.Path() == item.Path() {
+			s.items = append(s.items[:idx], s.items[idx+1:]...)
+			return
+		}
+	}
+}
+
+func (s *Selection) Length() int {
+	return len(s.items)
 }
 
 func (s *Selection) Exist(item Selectable) bool {
@@ -29,16 +47,17 @@ func (s *Selection) Exist(item Selectable) bool {
 }
 
 func (s *Selection) Clear() {
+	s.items = nil
 	s.set = make(map[string]struct{})
 }
 
 func (s *Selection) Toggle(item Selectable) {
 	if s.Exist(item) {
-		delete(s.set, item.Path())
+		s.Remove(item)
 		return
 	}
 
-	s.set[item.Path()] = struct{}{}
+	s.Add(item)
 }
 
 type listItem struct {
@@ -55,6 +74,8 @@ type List struct {
 	items []*listItem
 
 	selection *Selection
+
+	anchorIdx int
 
 	currentIdx int
 
@@ -75,19 +96,18 @@ type List struct {
 	horizontalOffset int
 
 	changed func(index int, text string)
-
-	selected func(idx int, selected bool)
 }
 
 func NewList() *List {
 	return &List{
-		Box:       tview.NewBox(),
-		selection: NewSelection(),
+		Box:        tview.NewBox(),
+		selection:  NewSelection(),
+		currentIdx: 0,
+		anchorIdx:  -1,
 	}
 }
 
 func (l *List) Grow(capacity int) *List {
-	l.Clear()
 	l.items = make([]*listItem, 0, capacity)
 	return l
 }
@@ -133,9 +153,8 @@ func (l *List) SetChangedFunc(handler func(idx int, text string)) *List {
 	return l
 }
 
-func (l *List) SetSelectedFunc(handler func(idx int, selected bool)) *List {
-	l.selected = handler
-	return l
+func (l *List) GetSelectedItems() []Selectable {
+	return l.selection.items
 }
 
 func (l *List) InsertItem(idx int, item Selectable, text string, style, selectedStyle *tcell.Style) *List {
@@ -196,15 +215,15 @@ func (l *List) RemoveItem(idx int) *List {
 		return l
 	}
 
-	// previousCurrentItem := l.currentIdx
+	previousCurrentIdx := l.currentIdx
 	if l.currentIdx > idx || l.currentIdx == len(l.items) {
 		l.currentIdx--
 	}
 
-	// if previousCurrentItem == index && l.changed != nil {
-	// 	item := l.items[l.currentItem]
-	// 	l.changed(l.currentItem, item.MainText, item.SecondaryText, item.Shortcut)
-	// }
+	if previousCurrentIdx == idx && l.changed != nil {
+		item := l.items[l.currentIdx]
+		l.changed(l.currentIdx, item.text)
+	}
 
 	return l
 }
@@ -222,6 +241,7 @@ func (l *List) Clear() *List {
 
 func (l *List) ClearSelected() {
 	l.selection.Clear()
+	l.anchorIdx = -1
 }
 
 func (l *List) adjustOffset() {
@@ -313,7 +333,7 @@ func (l *List) Draw(screen tcell.Screen) {
 		}
 
 		text := listItem.text
-		_, _, printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, false)
+		printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, false)
 		if printedWidth > maxWidth {
 			maxWidth = printedWidth
 		}
@@ -338,55 +358,108 @@ func (l *List) Draw(screen tcell.Screen) {
 
 func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return l.WrapInputHandler(func(e *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		if len(l.items) == 0 {
-			return
-		}
 		if l.currentIdx < 0 ||
-			l.currentIdx >= len(l.items) {
+			l.currentIdx >= len(l.items) ||
+			len(l.items) == 0 {
 			return
 		}
 		previousIdx := l.currentIdx
 		listItem := l.items[l.currentIdx]
 
+		switch e.Key() {
+		case tcell.KeyCtrlA:
+			l.updateSelectionRange(0, len(l.items)-1, true)
+		case tcell.KeyEscape:
+			l.ClearSelected()
+		case tcell.KeyDown:
+			if e.Modifiers()&tcell.ModShift != 0 {
+				if l.anchorIdx == -1 {
+					l.anchorIdx = previousIdx
+				}
+				l.currentIdx++
+				l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
+			} else {
+				l.anchorIdx = -1
+				l.currentIdx++
+			}
+		case tcell.KeyUp:
+			if e.Modifiers()&tcell.ModShift != 0 {
+				if l.anchorIdx == -1 {
+					l.anchorIdx = previousIdx
+				}
+				l.currentIdx--
+				l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
+			} else {
+				l.anchorIdx = -1
+				l.currentIdx--
+			}
+		}
+
+		// Обработка рун (букв и символов)
 		switch e.Rune() {
 		case 'j':
+			l.anchorIdx = -1
 			l.currentIdx++
 		case 'k':
+			l.anchorIdx = -1
 			l.currentIdx--
 		case 'g':
+			l.anchorIdx = -1
 			l.currentIdx = 0
 		case 'G':
+			l.anchorIdx = -1
 			l.currentIdx = len(l.items) - 1
 		case 's':
 			l.selection.Toggle(listItem.item)
-			if l.selected != nil {
-				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
-			}
 		case 'J':
-			l.selection.Toggle(listItem.item)
-			if l.selected != nil {
-				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
+			if l.anchorIdx == -1 {
+				l.anchorIdx = previousIdx
 			}
 			l.currentIdx++
+			l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
 		case 'K':
-			l.selection.Toggle(listItem.item)
-			if l.selected != nil {
-				l.selected(l.currentIdx, l.selection.Exist(listItem.item))
+			if l.anchorIdx == -1 {
+				l.anchorIdx = previousIdx
 			}
 			l.currentIdx--
+			l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
 		}
 
 		if l.currentIdx < 0 {
-			l.currentIdx = 0
+			if l.wrapAround {
+				l.currentIdx = len(l.items) - 1
+			} else {
+				l.currentIdx = 0
+			}
 		} else if l.currentIdx >= len(l.items) {
-			l.currentIdx = len(l.items) - 1
+			if l.wrapAround {
+				l.currentIdx = 0
+			} else {
+				l.currentIdx = len(l.items) - 1
+			}
 		}
 
 		if l.currentIdx != previousIdx && l.currentIdx < len(l.items) {
 			if l.changed != nil {
-				l.changed(l.currentIdx, listItem.text)
+				l.changed(l.currentIdx, l.items[l.currentIdx].text)
 			}
 			l.adjustOffset()
 		}
 	})
+}
+
+func (l *List) updateSelectionRange(anchor, current int, add bool) {
+	start := min(anchor, current)
+	end := max(anchor, current)
+	for idx := start; idx <= end; idx++ {
+		if idx < 0 || idx >= len(l.items) {
+			continue
+		}
+		item := l.items[idx].item
+		if add {
+			l.selection.Add(item)
+		} else {
+			l.selection.Remove(item)
+		}
+	}
 }

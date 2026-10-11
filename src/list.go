@@ -198,7 +198,6 @@ func (l *List) RemoveItem(idx int) *List {
 		return l
 	}
 
-	// Adjust index.
 	if idx < 0 {
 		idx = len(l.items) + idx
 	}
@@ -209,6 +208,9 @@ func (l *List) RemoveItem(idx int) *List {
 		idx = 0
 	}
 
+	item := l.items[idx].item
+
+	l.selection.Remove(item)
 	l.items = append(l.items[:idx], l.items[idx+1:]...)
 
 	if len(l.items) == 0 {
@@ -233,7 +235,7 @@ func (l *List) GetItemCount() int {
 }
 
 func (l *List) Clear() *List {
-	l.selection.Clear()
+	l.ClearSelected()
 	l.items = nil
 	l.currentIdx = 0
 	return l
@@ -394,8 +396,6 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 				l.currentIdx--
 			}
 		}
-
-		// Обработка рун (букв и символов)
 		switch e.Rune() {
 		case 'j':
 			l.anchorIdx = -1

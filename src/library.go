@@ -6,6 +6,7 @@ import (
 	"github.com/rivo/tview"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 var allowedExt = ".mp3"
@@ -43,6 +44,11 @@ func NewLibrary(dir string) *Library {
 
 	library.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		idx := library.currentIdx
+
+		switch e.Key() {
+		case tcell.KeyCtrlR:
+			library.readDir(library.currentPath)
+		}
 		switch e.Rune() {
 		case 'l':
 
@@ -97,12 +103,20 @@ func NewLibrary(dir string) *Library {
 				library.List.SetCurrentIdx(idx)
 			}
 			library.List.ClearSelected()
-		case 'r':
+		case 'd':
+			selectedItems := library.List.GetSelectedItems()
+			if len(selectedItems) > 0 {
+				library.RemoveAll()
+				library.List.ClearSelected()
+				return e
+			}
+
 			if len(library.files) == 0 ||
 				idx < 0 ||
 				idx >= len(library.files) {
 				return e
 			}
+
 			file := library.files[idx]
 			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current file?", file.Name())
 			confirmationPopup(popupText, func(_ int, label string) {
@@ -227,8 +241,36 @@ func (l *Library) Remove(idx int) error {
 	return nil
 }
 
-func (l *Library) RemoveAll(files []File) {
+// TODO: Make it more simple, log errors
 
+func (l *Library) RemoveAll() {
+	selectedItems := l.List.GetSelectedItems()
+
+	if len(selectedItems) == 0 {
+		return
+	}
+
+	indices := make([]int, 0, len(selectedItems))
+
+	for _, item := range selectedItems {
+		for i, f := range l.files {
+			if f.Path() == item.Path() {
+				indices = append(indices, i)
+				break
+			}
+		}
+	}
+
+	// This is crucial, because removing in a ascending order shifts elements, and eventually we can get an index out of range (panic)
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i] > indices[j]
+	})
+
+	for _, idx := range indices {
+		if err := l.Remove(idx); err != nil {
+			continue
+		}
+	}
 }
 
 func (l *Library) Clear() {

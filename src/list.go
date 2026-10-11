@@ -395,6 +395,18 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 				l.anchorIdx = -1
 				l.currentIdx--
 			}
+		case tcell.KeyCtrlJ:
+			if l.anchorIdx == -1 {
+				l.anchorIdx = previousIdx
+			}
+			l.currentIdx = len(l.items) - 1
+			l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
+		case tcell.KeyCtrlK:
+			if l.anchorIdx == -1 {
+				l.anchorIdx = previousIdx
+			}
+			l.currentIdx = 0
+			l.updateSelectionRange(l.anchorIdx, l.currentIdx, true)
 		}
 		switch e.Rune() {
 		case 'j':

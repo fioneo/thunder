@@ -14,7 +14,6 @@ type Library struct {
 	*tview.Frame
 	List        *List
 	files       []File
-	selected    []File
 	currentPath string
 	currentIdx  int
 	idxHistory  map[string]int
@@ -42,34 +41,21 @@ func NewLibrary(dir string) *Library {
 		library.UpdateInfo()
 	})
 
-	library.List.SetSelectedFunc(func(idx int, selected bool) {
-		file := library.files[idx]
-
-		if selected {
-			library.selected = append(library.selected, file)
-			return
-		}
-
-		for idx, f := range library.selected {
-			if f.Path() == file.Path() {
-				library.selected = append(library.selected[:idx], library.selected[idx+1:]...)
-				break
-			}
-		}
-	})
-
 	library.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if e.Key() == tcell.KeyEscape {
-			library.ClearSelected()
-		}
 		idx := library.currentIdx
 		switch e.Rune() {
 		case 'l':
 
-			if len(library.selected) != 0 {
-				songs := filesToSongs(library.selected)
+			selectedItems := library.List.GetSelectedItems()
+			if len(selectedItems) > 0 {
+				files := make([]File, 0, len(selectedItems))
+
+				for _, item := range selectedItems {
+					files = append(files, item.(File))
+				}
+				songs := filesToSongs(files)
 				thunder.PlayPanel.playlist.InsertAll(songs)
-				library.ClearSelected()
+				library.List.ClearSelected()
 				return e
 			}
 
@@ -110,7 +96,7 @@ func NewLibrary(dir string) *Library {
 				library.currentIdx = idx
 				library.List.SetCurrentIdx(idx)
 			}
-			library.ClearSelected()
+			library.List.ClearSelected()
 		case 'r':
 			if len(library.files) == 0 ||
 				idx < 0 ||
@@ -249,11 +235,6 @@ func (l *Library) Clear() {
 	l.currentIdx = 0
 	l.List.Clear()
 	l.files = nil
-}
-
-func (l *Library) ClearSelected() {
-	l.selected = nil
-	l.List.ClearSelected()
 }
 
 func (l *Library) UpdateInfo() {

@@ -69,22 +69,6 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		playlist.UpdateInfo()
 	})
 
-	playlist.List.SetSelectedFunc(func(idx int, selected bool) {
-		song := playlist.songs[idx]
-
-		if selected {
-			playlist.selected = append(playlist.selected, song)
-			return
-		}
-
-		for idx, s := range playlist.selected {
-			if s.Path() == song.Path() {
-				playlist.selected = append(playlist.selected[:idx], playlist.selected[idx+1:]...)
-				break
-			}
-		}
-	})
-
 	for i, song := range info.Songs() {
 		playlist.List.InsertItem(i, song, song.Name(), nil, nil)
 		playlist.songs = append(playlist.songs, song)

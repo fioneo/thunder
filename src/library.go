@@ -48,20 +48,27 @@ func NewLibrary(dir string) *Library {
 		switch e.Key() {
 		case tcell.KeyCtrlR:
 			library.readDir(library.currentPath)
+		case tcell.KeyEscape:
+			if len(library.List.GetSelectedItems()) != 0 {
+				library.List.ClearSelected()
+				library.UpdateInfo()
+			}
 		}
 		switch e.Rune() {
 		case 'l':
-
 			selectedItems := library.List.GetSelectedItems()
+
 			if len(selectedItems) > 0 {
 				files := make([]File, 0, len(selectedItems))
 
 				for _, item := range selectedItems {
 					files = append(files, item.(File))
 				}
+
 				songs := filesToSongs(files)
 				thunder.PlayPanel.playlist.InsertAll(songs)
 				library.List.ClearSelected()
+				library.UpdateInfo()
 				return e
 			}
 
@@ -102,12 +109,17 @@ func NewLibrary(dir string) *Library {
 				library.currentIdx = idx
 				library.List.SetCurrentIdx(idx)
 			}
-			library.List.ClearSelected()
 		case 'd':
 			selectedItems := library.List.GetSelectedItems()
 			if len(selectedItems) > 0 {
-				library.RemoveAll()
-				library.List.ClearSelected()
+				popupText := fmt.Sprintf("Are you sure you want to delete the selected files?\nNumber of files to be deleted: %d", len(selectedItems))
+				confirmationPopup(popupText, func(_ int, label string) {
+					if label == "yes" {
+						library.RemoveSelected()
+						library.List.ClearSelected()
+						library.UpdateInfo()
+					}
+				})
 				return e
 			}
 
@@ -118,14 +130,30 @@ func NewLibrary(dir string) *Library {
 			}
 
 			file := library.files[idx]
-			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current file?", file.Name())
-			confirmationPopup(popupText, func(_ int, label string) {
+
+			if file.IsDir() {
+				text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current folder?\nThis will delete all files in it.", file.Name())
+				confirmationPopup(text, func(_ int, label string) {
+					if label == "yes" {
+						if err := library.RemovePlaylist(idx); err != nil {
+							errorPopup(err)
+						}
+					}
+				})
+				return e
+			}
+
+			text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current file?", file.Name())
+
+			confirmationPopup(text, func(_ int, label string) {
 				if label == "yes" {
 					if err := library.Remove(idx); err != nil {
 						errorPopup(err)
 					}
 				}
 			})
+
+			library.UpdateInfo()
 		case 'o':
 			if library.CheckIsModified() {
 				confirmationPopup("You have unsaved changes.\nAre you sure you want to close the current playlist?", func(_ int, label string) {
@@ -144,13 +172,13 @@ func NewLibrary(dir string) *Library {
 			if library.CheckIsModified() {
 				confirmationPopup("You have unsaved changes.\nAre you sure you want to create a new playlist?", func(_ int, label string) {
 					if label == "yes" {
-						playlistInfo := NewDefaultPlaylistInfo()
+						playlistInfo := NewDefaultPlaylistInfo(library.currentPath)
 
 						thunder.PlayPanel.UpdateInfo(playlistInfo)
 					}
 				})
 			} else {
-				playlistInfo := NewDefaultPlaylistInfo()
+				playlistInfo := NewDefaultPlaylistInfo(library.currentPath)
 
 				thunder.PlayPanel.UpdateInfo(playlistInfo)
 			}
@@ -208,13 +236,13 @@ func (l *Library) readDir(path string) error {
 	}
 
 	l.files = files
-	l.UpdateInfo()
 	l.currentPath = path
-	dir := filepath.Base(path)
+	dir := filepath.Base(l.currentPath)
 	if dir != "/" {
 		dir += "/"
 	}
 	l.Frame.AddText(" "+dir, true, tview.AlignLeft, tcell.ColorGreen)
+	l.UpdateInfo()
 
 	return nil
 }
@@ -236,14 +264,12 @@ func (l *Library) Remove(idx int) error {
 		l.currentIdx--
 	}
 
-	l.UpdateInfo()
-
 	return nil
 }
 
 // TODO: Make it more simple, log errors
 
-func (l *Library) RemoveAll() {
+func (l *Library) RemoveSelected() {
 	selectedItems := l.List.GetSelectedItems()
 
 	if len(selectedItems) == 0 {
@@ -261,7 +287,7 @@ func (l *Library) RemoveAll() {
 		}
 	}
 
-	// This is crucial, because removing in a ascending order shifts elements, and eventually we can get an index out of range (panic)
+	// This is crucial, because removing in ascending order shifts elements, and eventually we can get an index out of range (panic)
 	sort.Slice(indices, func(i, j int) bool {
 		return indices[i] > indices[j]
 	})
@@ -271,6 +297,30 @@ func (l *Library) RemoveAll() {
 			continue
 		}
 	}
+}
+
+func (l *Library) RemovePlaylist(idx int) error {
+	file := l.files[idx]
+	if !file.IsDir() {
+		return fmt.Errorf("not a directory")
+	}
+
+	if err := os.RemoveAll(file.Path()); err != nil {
+		return err
+	}
+
+	l.List.RemoveItem(idx)
+	l.files = append(l.files[:idx], l.files[idx+1:]...)
+
+	if len(l.files) == 0 {
+		return nil
+	}
+
+	if l.currentIdx > idx || l.currentIdx == len(l.files) {
+		l.currentIdx--
+	}
+
+	return nil
 }
 
 func (l *Library) Clear() {
@@ -284,6 +334,7 @@ func (l *Library) UpdateInfo() {
 	if len(l.files) > 0 {
 		idx++
 	}
+
 	title := fmt.Sprintf("─ %s ──┤ %d / %d ├",
 		"Library",
 		idx,

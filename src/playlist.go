@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"sort"
+	"time"
 )
 
 type Playlist struct {
 	*tview.Pages
 	List        *List
 	songs       []Song
-	selected    []Song
 	currentIdx  int
 	currentSong int
 	mode        PlayMode
@@ -42,19 +43,36 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 	}
 
 	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		idx := playlist.currentIdx
+
 		if e.Key() == tcell.KeyEscape {
-			playlist.ClearSelected()
+			if len(playlist.List.GetSelectedItems()) != 0 {
+				playlist.List.ClearSelected()
+				playlist.UpdateTitle()
+			}
 		}
 		switch e.Rune() {
-		case 'r':
-			idx := playlist.currentIdx
+		case 'd':
 			if len(playlist.songs) == 0 ||
 				idx < 0 ||
 				idx >= len(playlist.songs) {
 				return e
 			}
+			selectedItems := playlist.List.GetSelectedItems()
+			if len(selectedItems) > 0 {
+				popupText := fmt.Sprintf("Are you sure you want to remove the selected songs from playlist?\nNumber of songs to be removed: %d", len(selectedItems))
+				confirmationPopup(popupText, func(_ int, label string) {
+					if label == "yes" {
+						playlist.RemoveSelected()
+						playlist.List.ClearSelected()
+						playlist.UpdateInfo()
+					}
+				})
+				return e
+			}
+
 			song := playlist.songs[idx]
-			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current file from playlist?", song.Name())
+			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from playlist?", song.Name())
 			confirmationPopup(popupText, func(_ int, label string) {
 				if label == "yes" {
 					playlist.Remove(idx)
@@ -89,18 +107,13 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 }
 
 func (p *Playlist) Insert(song Song) {
-	if _, ok := p.unique[song.Path()]; !ok {
+	if p.IsUnique(song) {
 		p.add(song)
 		return
 	}
+	text := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.", song.Name())
 
-	text := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.\nDo you want to add it again?", song.Name())
-
-	confirmationPopup(text, func(_ int, label string) {
-		if label == "yes" {
-			p.add(song)
-		}
-	})
+	timeoutPopup(text, 3*time.Second)
 }
 
 func (p *Playlist) add(song Song) {
@@ -117,8 +130,20 @@ func (p *Playlist) add(song Song) {
 }
 
 func (p *Playlist) InsertAll(songs []Song) {
+	added := 0
+	existing := 0
 	for _, song := range songs {
-		p.Insert(song)
+		if p.IsUnique(song) {
+			p.add(song)
+			added++
+		} else {
+			existing++
+		}
+	}
+
+	if existing > 0 {
+		text := fmt.Sprintf("Songs added: %d\nSongs already in the playlist: %d", added, existing)
+		timeoutPopup(text, 3*time.Second)
 	}
 }
 
@@ -144,9 +169,32 @@ func (p *Playlist) Remove(idx int) {
 
 }
 
-func (p *Playlist) RemoveAll(indexes []int) {
-	for i, _ := range indexes {
-		p.Remove(i)
+func (p *Playlist) RemoveSelected() {
+	selectedItems := p.List.GetSelectedItems()
+
+	if len(selectedItems) == 0 {
+		return
+	}
+
+	indices := make([]int, 0, len(selectedItems))
+
+	for _, item := range selectedItems {
+		for i, s := range p.songs {
+			if s.Path() == item.Path() {
+				indices = append(indices, i)
+				break
+			}
+		}
+	}
+
+	// This is crucial, because removing in ascending order shifts elements, and eventually we can get an index out of range (panic)
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i] > indices[j]
+	})
+
+	for _, idx := range indices {
+		p.Remove(idx)
+
 	}
 }
 
@@ -165,25 +213,12 @@ func (p *Playlist) SwitchMode() {
 	}
 }
 
-func (p *Playlist) ClearSelected() {
-	p.selected = nil
-	p.List.ClearSelected()
-}
-
 func (p *Playlist) SetUpdateTitleFunc(updateTitleFunc func()) {
 	p.updateTitle = updateTitleFunc
 }
 
 func (p *Playlist) UpdateTitle() {
 	p.updateTitle()
-}
-
-func (p *Playlist) Get(i int) Song {
-	if i < 0 || i >= len(p.songs) {
-		return nil
-	}
-
-	return p.songs[i]
 }
 
 func (p *Playlist) Play(i int) {
@@ -208,4 +243,10 @@ func (p *Playlist) UpdateInfo() {
 
 func (p *Playlist) SetIsModified(modified bool) {
 	p.isModified = modified
+}
+
+func (p *Playlist) IsUnique(song Song) bool {
+	_, ok := p.unique[song.Path()]
+	return !ok
+	// IsUnique() = true = not in playlist ; IsUnique() = false = already in playlist
 }

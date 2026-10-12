@@ -26,10 +26,6 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 	}
 
 	playpanel.SetInputCapture((func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
-			playpanel.SwitchToPage("playlist")
-			playpanel.playlist.UpdateTitle()
-		}
 		switch event.Rune() {
 		case 'q':
 			currentPage, _ := playpanel.GetFrontPage()
@@ -65,10 +61,6 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 		playpanel.SetTitle(title)
 	})
 
-	playpanel.SetBlurFunc(playpanel.BlurPanel)
-
-	playpanel.SetFocusFunc(playpanel.FocusPanel)
-
 	playpanel.SetBorder(true).
 		SetBorderColor(thunder.Colors.Foreground).
 		SetTitleColor(thunder.Colors.Foreground).
@@ -80,18 +72,4 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 
 func (p *PlayPanel) UpdateInfo(info PlaylistInfo) {
 	*p = *NewPlayPanel(info)
-}
-
-func (p *PlayPanel) BlurPanel() {
-	p.playlist.List.
-		SetSelectedFocusOnly(true)
-	p.queue.List.
-		SetSelectedFocusOnly(true)
-}
-
-func (p *PlayPanel) FocusPanel() {
-	p.playlist.List.
-		SetSelectedFocusOnly(false)
-	p.queue.List.
-		SetSelectedFocusOnly(false)
 }

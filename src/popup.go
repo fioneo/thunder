@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -12,8 +14,9 @@ var (
 )
 
 type popupEntry struct {
-	panel Panel
-	page  string
+	panel     Panel
+	page      string
+	focusable bool
 }
 
 type PopupQueue struct {
@@ -24,19 +27,23 @@ func NewPopupQueue() *PopupQueue {
 	return &PopupQueue{}
 }
 
-func (q *PopupQueue) Enqueue(popup tview.Primitive, page string) {
+func (q *PopupQueue) Enqueue(popup tview.Primitive, page string, focusable bool) {
 	panel, ok := popup.(Panel)
 	if !ok {
 		return
 	}
 
 	q.popups = append(q.popups, popupEntry{
-		panel: panel,
-		page:  page,
+		panel:     panel,
+		page:      page,
+		focusable: focusable,
 	})
 	popupCount.Add(1)
 
 	if q.Length() == 1 {
+		if focusable {
+			thunder.UnfocusAll()
+		}
 		q.Next()
 	}
 
@@ -44,12 +51,14 @@ func (q *PopupQueue) Enqueue(popup tview.Primitive, page string) {
 
 func (q *PopupQueue) Next() {
 	if q.Length() == 0 {
-		thunder.App.SetFocus(thunder.Panels[thunder.CurrentPanelIdx].(tview.Primitive))
+		q.Reset()
 		return
 	}
 	next := q.popups[0]
 
-	thunder.App.SetFocus(next.panel.(tview.Primitive))
+	if next.focusable {
+		thunder.SetFocusPanel(nil, next.panel)
+	}
 	thunder.Pages.ShowPage(next.page)
 }
 
@@ -61,14 +70,16 @@ func (q *PopupQueue) DismissCurrent() {
 	popup := q.popups[0]
 	thunder.Pages.RemovePage(popup.page)
 
-	thunder.App.SetFocus(popup.panel.(tview.Primitive))
-
 	q.popups = q.popups[1:]
 	q.Next()
 }
 
 func (q *PopupQueue) Length() int {
 	return len(q.popups)
+}
+
+func (q *PopupQueue) Reset() {
+	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
 }
 
 func confirmationPopup(text string, handler func(int, string)) {
@@ -103,39 +114,42 @@ func confirmationPopup(text string, handler func(int, string)) {
 	})
 
 	thunder.Pages.AddPage(page, modal, true, false)
-	thunder.Popups.Enqueue(modal, page)
+	thunder.Popups.Enqueue(modal, page, true)
 }
+
 func errorPopup(err error) {
-	page := fmt.Sprintf("error_popup-%d", popupCount.Load())
+	timeoutPopup(err.Error(), 3*time.Second)
+}
 
-	modal := tview.NewModal().
-		SetText(err.Error()).
-		SetTextColor(tcell.ColorRed).
-		SetBackgroundColor(thunder.Colors.Background).
-		AddButtons([]string{"ok"}).
-		SetButtonStyle(tcell.StyleDefault.Foreground(thunder.Colors.Accent).Background(thunder.Colors.Background)).
-		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
+func timeoutPopup(title string, timeout time.Duration) {
+	page := fmt.Sprintf("timeout_popup-%d", popupCount.Load())
 
-	modal.SetDoneFunc(func(_ int, _ string) {
-		thunder.Popups.DismissCurrent()
-	})
+	textView := tview.NewTextView().
+		SetText(title).
+		SetTextColor(thunder.Colors.Accent).SetTextAlign(tview.AlignCenter)
 
-	modal.SetBorderColor(tcell.ColorRed).
-		SetBackgroundColor(thunder.Colors.Background)
+	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
+		SetBorderColor(thunder.Colors.Foreground).SetBorderPadding(1, 1, 1, 1)
 
-	modal.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		switch e.Rune() {
-		case 'j':
-			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-		case 'k':
-			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-		case ' ':
-			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
-		}
+	thunder.Pages.AddPage(page, topRight(textView), true, false)
+	thunder.Popups.Enqueue(textView, page, false)
 
-		return e
-	})
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		<-ctx.Done()
+		thunder.App.QueueUpdateDraw(func() {
+			thunder.Popups.DismissCurrent()
+		})
+	}()
+}
 
-	thunder.Pages.AddPage(page, modal, true, false)
-	thunder.Popups.Enqueue(modal, page)
+func topRight(p tview.Primitive) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 20, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(p, 0, 4, true).
+			AddItem(nil, 0, 8, false), 0, 12, true).
+		AddItem(nil, 0, 1, false)
 }

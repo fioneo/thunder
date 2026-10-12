@@ -22,13 +22,13 @@ type Thunder struct {
 }
 
 func (t *Thunder) InitPanels(app *tview.Application) {
-	homeDir, err := os.UserHomeDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		exit(err)
 	}
-	playlistInfo := NewDefaultPlaylistInfo()
+	playlistInfo := NewDefaultPlaylistInfo(home)
 	t.Player = NewPlayer()
-	t.Library = NewLibrary(homeDir)
+	t.Library = NewLibrary(home)
 	t.PlayPanel = NewPlayPanel(playlistInfo)
 	t.PlayBar = NewPlayBar()
 	t.Pages = tview.NewPages()
@@ -92,9 +92,18 @@ func (t *Thunder) SetFocusPanel(prevPanel, currentPanel Panel) {
 
 	t.App.SetFocus(primitive)
 
-	prevPanel.SetBorderColor(t.Colors.Foreground)
-	prevPanel.SetTitleColor(t.Colors.Foreground)
+	if prevPanel != nil {
+		prevPanel.SetBorderColor(t.Colors.Foreground)
+		prevPanel.SetTitleColor(t.Colors.Foreground)
+	}
 
 	currentPanel.SetBorderColor(t.Colors.Accent)
 	currentPanel.SetTitleColor(t.Colors.Accent)
+}
+
+func (t *Thunder) UnfocusAll() {
+	for _, p := range t.Panels {
+		p.SetBorderColor(t.Colors.Foreground)
+		p.SetTitleColor(t.Colors.Foreground)
+	}
 }

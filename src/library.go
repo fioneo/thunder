@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 var allowedExt = ".mp3"
@@ -21,7 +22,7 @@ type Library struct {
 }
 
 func NewLibrary(dir string) *Library {
-	path := filepath.Join(dir, "Music/playlists")
+	path := filepath.Join(dir, "Music")
 
 	list := NewList()
 	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
@@ -192,11 +193,12 @@ func NewLibrary(dir string) *Library {
 		SetHighlightFullLine(true).
 		SetSelectedFocusOnly(true).
 		SetWrapAround(false).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorGreen)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Selected).Background(thunder.Colors.Selected)).
 		SetBackgroundColor(thunder.Colors.Background)
 
 	library.
 		SetBorder(true).
+		SetBorderPadding(0, 0, 0, 1).
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(thunder.Colors.Accent).
 		SetTitleColor(thunder.Colors.Accent).
@@ -223,7 +225,7 @@ func (l *Library) readDir(path string) error {
 				continue
 			}
 			path := filepath.Join(path, entry.Name())
-			name := entry.Name()
+			name := strings.TrimSuffix(entry.Name(), ".mp3")
 
 			file := NewFile(name, path, entry.IsDir())
 
@@ -241,7 +243,7 @@ func (l *Library) readDir(path string) error {
 	if dir != "/" {
 		dir += "/"
 	}
-	l.Frame.AddText(" "+dir, true, tview.AlignLeft, tcell.ColorGreen)
+	l.Frame.AddText(" "+dir, true, tview.AlignLeft, thunder.Colors.Playlist)
 	l.UpdateInfo()
 
 	return nil

@@ -5,85 +5,247 @@ import (
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+type Position uint8
+
+const (
+	Center Position = iota
+	TopRight
+)
+
+func (p Position) ToFunc() func(tview.Primitive, int, int) tview.Primitive {
+	var (
+		f func(tview.Primitive, int, int) tview.Primitive
+	)
+	switch p {
+	case Center:
+		f = center
+	case TopRight:
+		f = topRight
+	}
+	return f
+}
 
 var (
 	popupCount atomic.Uint32
 )
 
-type popupEntry struct {
-	panel     Panel
-	page      string
+type defaultPopup struct {
+	id        string
+	primitive tview.Primitive
 	focusable bool
+	position  Position
 }
 
-type PopupQueue struct {
-	popups []popupEntry
+type timedPopup struct {
+	*defaultPopup
+	timeout time.Duration
+	hide    chan struct{}
+	once    sync.Once
 }
 
-func NewPopupQueue() *PopupQueue {
-	return &PopupQueue{}
-}
-
-func (q *PopupQueue) Enqueue(popup tview.Primitive, page string, focusable bool) {
-	panel, ok := popup.(Panel)
-	if !ok {
-		return
-	}
-
-	q.popups = append(q.popups, popupEntry{
-		panel:     panel,
-		page:      page,
+func NewDefaultPopup(p tview.Primitive, id string, focusable bool, position Position) *defaultPopup {
+	popup := &defaultPopup{
+		primitive: p,
+		id:        id,
 		focusable: focusable,
-	})
-	popupCount.Add(1)
+		position:  position,
+	}
 
-	if q.Length() == 1 {
-		if focusable {
-			thunder.UnfocusAll()
+	return popup
+}
+
+func NewTimeoutPopup(p tview.Primitive, id string, focusable bool, position Position, timeout time.Duration) *timedPopup {
+	return &timedPopup{
+		defaultPopup: &defaultPopup{
+			primitive: p,
+			id:        id,
+			focusable: focusable,
+			position:  position,
+		},
+		hide:    make(chan struct{}),
+		timeout: timeout,
+	}
+}
+
+func (p *defaultPopup) ID() string {
+	return p.id
+}
+
+func (p *defaultPopup) Show() {
+	thunder.Pages.ShowPage(p.id)
+}
+
+func (p *defaultPopup) Hide() {
+	thunder.Pages.RemovePage(p.id)
+}
+
+func (p *defaultPopup) Primitive() tview.Primitive {
+	return p.primitive
+}
+
+func (p *defaultPopup) Focusable() bool {
+	return p.focusable
+}
+
+func (p *timedPopup) ID() string {
+	return p.id
+}
+
+func (p *timedPopup) Show() {
+	thunder.Pages.ShowPage(p.id)
+}
+
+func (p *timedPopup) Hide() {
+	thunder.Pages.RemovePage(p.id)
+}
+
+func (p *timedPopup) Primitive() tview.Primitive {
+	return p.primitive
+}
+
+func (p *timedPopup) Focusable() bool {
+	return p.focusable
+}
+
+func (p *timedPopup) Close() {
+	p.once.Do(func() {
+		if p.hide != nil {
+			close(p.hide)
 		}
-		q.Next()
-	}
-
+	})
 }
 
-func (q *PopupQueue) Next() {
-	if q.Length() == 0 {
-		q.Reset()
+type stack struct {
+	Push   func(Popup)
+	Pop    func() Popup
+	Top    func() Popup
+	Length func() int
+}
+
+func newStack() stack {
+	slice := make([]Popup, 0)
+
+	return stack{
+		Push: func(p Popup) {
+			slice = append(slice, p)
+		},
+		Pop: func() Popup {
+			res := slice[len(slice)-1]
+			slice = slice[:len(slice)-1]
+			return res
+		},
+		Top: func() Popup {
+			return slice[len(slice)-1]
+		},
+		Length: func() int {
+			return len(slice)
+		},
+	}
+}
+
+type PopupManager struct {
+	popups         map[string]Popup
+	prevTimedPopup Popup
+	stack          stack
+	mu             sync.RWMutex
+}
+
+func NewPopupManager() *PopupManager {
+	return &PopupManager{
+		popups: make(map[string]Popup),
+		stack:  newStack(),
+	}
+}
+
+func (pm *PopupManager) Show(p Popup) {
+
+	switch popup := p.(type) {
+	case *defaultPopup:
+		popupCount.Add(1)
+		pm.stack.Push(popup)
+
+		positionFunc := popup.position.ToFunc()
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, 70, 7), true, false)
+
+		popup.Show()
+		if popup.focusable {
+			thunder.UnfocusAll()
+			thunder.SetFocusPanel(nil, popup.primitive.(Panel)) // TODO
+		}
+
+	case *timedPopup:
+		prev := pm.prevTimedPopup
+
+		if prev != nil {
+			prev.(*timedPopup).Close()
+		}
+
+		popupCount.Add(1)
+		pm.stack.Push(popup)
+
+		positionFunc := popup.position.ToFunc()
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, 70, 7), true, false)
+
+		if popup.focusable {
+			thunder.SetFocusPanel(nil, popup.primitive.(Panel)) // TODO
+		}
+
+		popup.Show()
+		thunder.ResetFocus()
+
+		pm.prevTimedPopup = popup
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), popup.timeout)
+			defer cancel()
+
+			select {
+			case <-ctx.Done(): // Timeout
+			case <-popup.hide: // New popup added -> remove old one
+			}
+
+			thunder.App.QueueUpdateDraw(func() {
+				pm.Hide(popup)
+			})
+		}()
+	}
+	pm.popups[p.ID()] = p
+}
+
+func (pm *PopupManager) Hide(popup Popup) {
+	popup.Hide()
+	pm.SwitchFocus(popup)
+	delete(pm.popups, popup.ID())
+}
+
+func (pm *PopupManager) SwitchFocus(prev Popup) {
+	pm.mu.Lock()
+	if pm.stack.Length() == 0 {
+		thunder.ResetFocus()
+		pm.mu.Unlock()
 		return
 	}
-	next := q.popups[0]
 
-	if next.focusable {
-		thunder.SetFocusPanel(nil, next.panel)
-	}
-	thunder.Pages.ShowPage(next.page)
-}
+	popup := pm.stack.Pop()
 
-func (q *PopupQueue) DismissCurrent() {
-	if q.Length() == 0 {
+	if !popup.Focusable() {
+		pm.mu.Unlock()
+		pm.SwitchFocus(popup)
 		return
 	}
 
-	popup := q.popups[0]
-	thunder.Pages.RemovePage(popup.page)
-
-	q.popups = q.popups[1:]
-	q.Next()
+	thunder.SetFocusPanel(prev.Primitive().(Panel), popup.Primitive().(Panel))
+	pm.mu.Unlock()
 }
 
-func (q *PopupQueue) Length() int {
-	return len(q.popups)
-}
-
-func (q *PopupQueue) Reset() {
-	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
-}
+func (pm *PopupManager) Get(id string, popup Popup) {}
 
 func confirmationPopup(text string, handler func(int, string)) {
-	page := fmt.Sprintf("confirmation_popup-%d", popupCount.Load())
+	id := fmt.Sprintf("confirmation_popup-%d", popupCount.Load())
 
 	modal := tview.NewModal().
 		SetText(text).
@@ -91,11 +253,6 @@ func confirmationPopup(text string, handler func(int, string)) {
 		AddButtons([]string{"no", "yes"}).
 		SetButtonStyle(tcell.StyleDefault.Foreground(thunder.Colors.Accent).Background(thunder.Colors.Background)).
 		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
-
-	modal.SetDoneFunc(func(indx int, label string) {
-		thunder.Popups.DismissCurrent()
-		handler(indx, label)
-	})
 
 	modal.SetBorderColor(thunder.Colors.Accent).
 		SetBackgroundColor(thunder.Colors.Background)
@@ -113,43 +270,55 @@ func confirmationPopup(text string, handler func(int, string)) {
 		return e
 	})
 
-	thunder.Pages.AddPage(page, modal, true, false)
-	thunder.Popups.Enqueue(modal, page, true)
+	popup := NewDefaultPopup(modal, id, true, Center)
+
+	modal.SetDoneFunc(func(indx int, label string) {
+		thunder.Popups.Hide(popup)
+		handler(indx, label)
+	})
+
+	thunder.Popups.Show(popup)
 }
 
 func errorPopup(err error) {
-	timeoutPopup(err.Error(), 3*time.Second)
+	timeoutPopup(err.Error(), 2*time.Second, tcell.ColorRed, tcell.ColorRed)
 }
 
-func timeoutPopup(title string, timeout time.Duration) {
-	page := fmt.Sprintf("timeout_popup-%d", popupCount.Load())
+func infoPopup(text string) {
+	timeoutPopup(text, 2*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground)
+}
+
+func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color) {
+	id := fmt.Sprintf("timeout_popup-%d", popupCount.Load())
 
 	textView := tview.NewTextView().
-		SetText(title).
-		SetTextColor(thunder.Colors.Accent).SetTextAlign(tview.AlignCenter)
+		SetText(text).
+		SetTextColor(textColor).SetTextAlign(tview.AlignCenter)
 
 	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
-		SetBorderColor(thunder.Colors.Foreground).SetBorderPadding(1, 1, 1, 1)
+		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
-	thunder.Pages.AddPage(page, topRight(textView), true, false)
-	thunder.Popups.Enqueue(textView, page, false)
+	popup := NewTimeoutPopup(textView, id, false, TopRight, timeout)
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		<-ctx.Done()
-		thunder.App.QueueUpdateDraw(func() {
-			thunder.Popups.DismissCurrent()
-		})
-	}()
+	thunder.Popups.Show(popup)
 }
 
-func topRight(p tview.Primitive) tview.Primitive {
+func topRight(p tview.Primitive, width, height int) tview.Primitive {
 	return tview.NewFlex().
-		AddItem(nil, 0, 20, false).
+		AddItem(nil, 0, 40, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(p, 0, 4, true).
-			AddItem(nil, 0, 8, false), 0, 12, true).
+			AddItem(p, height, 1, false).
+			AddItem(nil, 0, 10, false), width, 1, false).
+		AddItem(nil, 0, 1, false)
+}
+
+func center(p tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(p, height, 1, false).
+			AddItem(nil, 0, 1, false), width, 1, false).
 		AddItem(nil, 0, 1, false)
 }

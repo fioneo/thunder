@@ -16,7 +16,7 @@ type Thunder struct {
 	PlayBar         *PlayBar
 	Player          *Player
 	Panels          []Panel
-	Popups          *PopupQueue
+	Popups          *PopupManager
 	Colors          *Colors
 	CurrentPanelIdx int
 }
@@ -34,7 +34,7 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	t.Pages = tview.NewPages()
 	t.App = app
 	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
-	t.Popups = NewPopupQueue()
+	t.Popups = NewPopupManager()
 }
 
 func NewThunder() *Thunder {
@@ -57,16 +57,18 @@ type Colors struct {
 	Background tcell.Color
 	Foreground tcell.Color
 	Popup      tcell.Color
+	Selected   tcell.Color
 }
 
 func DefaultColors() *Colors {
 	return &Colors{
 		Background: tcell.ColorDefault,
-		Foreground: tcell.GetColor("#E5E9F0"),
-		Accent:     tcell.GetColor("#88C0D0"),
-		Song:       tcell.GetColor("#81A1C1"),
-		Playlist:   tcell.GetColor("#88C0D0"),
-		Popup:      tcell.GetColor("#7BB3C7"),
+		Foreground: tcell.GetColor("#FEF9FF"),
+		Accent:     tcell.GetColor("#6DB2EE"),
+		Song:       tcell.GetColor("#7CA7DF"),
+		Playlist:   tcell.GetColor("#6DB2EE"),
+		Popup:      tcell.GetColor("#6DB2EE"),
+		Selected:   tcell.GetColor("#9F9FED"),
 	}
 }
 
@@ -106,4 +108,8 @@ func (t *Thunder) UnfocusAll() {
 		p.SetBorderColor(t.Colors.Foreground)
 		p.SetTitleColor(t.Colors.Foreground)
 	}
+}
+
+func (t *Thunder) ResetFocus() {
+	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
 }

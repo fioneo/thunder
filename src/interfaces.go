@@ -8,6 +8,7 @@ import (
 type Song interface {
 	Name() string
 	Path() string
+	// Length() time.Duration
 }
 
 type PlaylistInfo interface {
@@ -26,4 +27,12 @@ type File interface {
 	IsDir() bool
 	Name() string
 	Path() string
+}
+
+type Popup interface {
+	ID() string
+	Show()
+	Hide()
+	Primitive() tview.Primitive
+	Focusable() bool
 }

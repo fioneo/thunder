@@ -51,24 +51,26 @@ func NewThunder() *Thunder {
 }
 
 type Colors struct {
-	Accent     tcell.Color
-	Song       tcell.Color
-	Playlist   tcell.Color
-	Background tcell.Color
-	Foreground tcell.Color
-	Popup      tcell.Color
-	Selected   tcell.Color
+	Accent      tcell.Color
+	Song        tcell.Color
+	Playlist    tcell.Color
+	Background  tcell.Color
+	Foreground  tcell.Color
+	Popup       tcell.Color
+	Selected    tcell.Color
+	Highlighted tcell.Color
 }
 
 func DefaultColors() *Colors {
 	return &Colors{
-		Background: tcell.ColorDefault,
-		Foreground: tcell.GetColor("#FEF9FF"),
-		Accent:     tcell.GetColor("#6DB2EE"),
-		Song:       tcell.GetColor("#7CA7DF"),
-		Playlist:   tcell.GetColor("#6DB2EE"),
-		Popup:      tcell.GetColor("#6DB2EE"),
-		Selected:   tcell.GetColor("#9F9FED"),
+		Background:  tcell.ColorDefault,
+		Foreground:  tcell.GetColor("#FEF9FF"),
+		Accent:      tcell.GetColor("#6DB2EE"),
+		Song:        tcell.GetColor("#7CA7DF"),
+		Playlist:    tcell.GetColor("#6DB2EE"),
+		Popup:       tcell.GetColor("#6DB2EE"),
+		Selected:    tcell.GetColor("#9F9FED"),
+		Highlighted: tcell.GetColor("#59BDEB"),
 	}
 }
 
@@ -90,17 +92,19 @@ func (t *Thunder) CyclePanels() {
 
 func (t *Thunder) SetFocusPanel(prevPanel, currentPanel Panel) {
 
-	primitive := currentPanel.(tview.Primitive)
-
-	t.App.SetFocus(primitive)
-
 	if prevPanel != nil {
 		prevPanel.SetBorderColor(t.Colors.Foreground)
 		prevPanel.SetTitleColor(t.Colors.Foreground)
 	}
 
-	currentPanel.SetBorderColor(t.Colors.Accent)
-	currentPanel.SetTitleColor(t.Colors.Accent)
+	if currentPanel != nil {
+		primitive := currentPanel.(tview.Primitive)
+
+		t.App.SetFocus(primitive)
+
+		currentPanel.SetBorderColor(t.Colors.Accent)
+		currentPanel.SetTitleColor(t.Colors.Accent)
+	}
 }
 
 func (t *Thunder) UnfocusAll() {
@@ -111,5 +115,6 @@ func (t *Thunder) UnfocusAll() {
 }
 
 func (t *Thunder) ResetFocus() {
+	t.UnfocusAll()
 	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
 }

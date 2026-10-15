@@ -5,7 +5,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"sort"
-	"time"
 )
 
 type Playlist struct {
@@ -17,7 +16,7 @@ type Playlist struct {
 	mode        PlayMode
 	name        string
 	path        string
-	isModified  bool
+	modified    bool
 	unique      map[string]struct{}
 	updateTitle func()
 }
@@ -43,7 +42,6 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 	}
 
 	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		idx := playlist.currentIdx
 
 		if e.Key() == tcell.KeyEscape {
 			if len(playlist.List.GetSelectedItems()) != 0 {
@@ -52,7 +50,17 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 			}
 		}
 		switch e.Rune() {
+		case ' ':
+			idx := playlist.currentIdx
+			if idx < 0 || idx >= len(playlist.songs) {
+				return e
+			}
+
+			if err := playlist.Play(idx); err != nil {
+				errorPopup(err)
+			}
 		case 'd':
+			idx := playlist.currentIdx
 			if len(playlist.songs) == 0 ||
 				idx < 0 ||
 				idx >= len(playlist.songs) {
@@ -60,12 +68,16 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 			}
 			selectedItems := playlist.List.GetSelectedItems()
 			if len(selectedItems) > 0 {
-				popupText := fmt.Sprintf("Are you sure you want to remove the selected songs from playlist?\nNumber of songs to be removed: %d", len(selectedItems))
+				popupText := fmt.Sprintf("Are you sure you want to remove the selected songs from the playlist?\nNumber of songs to be removed: %d", len(selectedItems))
 				confirmationPopup(popupText, func(_ int, label string) {
 					if label == "yes" {
-						playlist.RemoveSelected()
-						playlist.List.ClearSelected()
-						playlist.UpdateInfo()
+						popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from playlist?", "hi")
+						confirmationPopup(popupText, func(_ int, label string) {
+							if label == "yes" {
+								playlist.Remove(idx)
+								playlist.UpdateInfo()
+							}
+						})
 					}
 				})
 				return e
@@ -76,6 +88,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 			confirmationPopup(popupText, func(_ int, label string) {
 				if label == "yes" {
 					playlist.Remove(idx)
+					playlist.UpdateInfo()
 				}
 			})
 		}
@@ -99,7 +112,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
 		SetSelectedFocusOnly(true).
 		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(tcell.ColorGreen)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Selected)).
 		SetHighlightFullLine(true).
 		SetWrapAround(false).
 		SetBackgroundColor(thunder.Colors.Background)
@@ -113,7 +126,7 @@ func (p *Playlist) Insert(song Song) {
 	}
 	text := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.", song.Name())
 
-	timeoutPopup(text, 3*time.Second)
+	infoPopup(text)
 }
 
 func (p *Playlist) add(song Song) {
@@ -124,6 +137,7 @@ func (p *Playlist) add(song Song) {
 	p.unique[song.Path()] = struct{}{}
 
 	p.List.SetCurrentIdx(itemIdx)
+	p.currentIdx = itemIdx
 	p.List.SetItemOffset(itemIdx)
 	p.SetIsModified(true)
 	p.UpdateInfo()
@@ -143,7 +157,7 @@ func (p *Playlist) InsertAll(songs []Song) {
 
 	if existing > 0 {
 		text := fmt.Sprintf("Songs added: %d\nSongs already in the playlist: %d", added, existing)
-		timeoutPopup(text, 3*time.Second)
+		infoPopup(text)
 	}
 }
 
@@ -164,9 +178,6 @@ func (p *Playlist) Remove(idx int) {
 	if p.currentIdx > idx || p.currentIdx == len(p.songs) {
 		p.currentIdx--
 	}
-
-	p.UpdateInfo()
-
 }
 
 func (p *Playlist) RemoveSelected() {
@@ -221,8 +232,9 @@ func (p *Playlist) UpdateTitle() {
 	p.updateTitle()
 }
 
-func (p *Playlist) Play(i int) {
-	//TODO
+func (p *Playlist) Play(idx int) error {
+
+	return nil
 }
 
 func (p *Playlist) CheckIsEmpty() {
@@ -242,7 +254,11 @@ func (p *Playlist) UpdateInfo() {
 }
 
 func (p *Playlist) SetIsModified(modified bool) {
-	p.isModified = modified
+	p.modified = modified
+}
+
+func (p *Playlist) GetModified() bool {
+	return p.modified
 }
 
 func (p *Playlist) IsUnique(song Song) bool {

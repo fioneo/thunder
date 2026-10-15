@@ -17,7 +17,7 @@ type Playlist struct {
 	name        string
 	path        string
 	modified    bool
-	unique      map[string]struct{}
+	set         map[string]struct{}
 	updateTitle func()
 }
 
@@ -33,15 +33,15 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		AddPage("empty_playlist", emptyPlaylistText, true, false)
 
 	playlist := &Playlist{
-		Pages:  pages,
-		List:   list,
-		mode:   DefaultMode,
-		name:   info.Name(),
-		path:   info.Path(),
-		unique: make(map[string]struct{}, len(info.Songs())),
+		Pages: pages,
+		List:  list,
+		mode:  DefaultMode,
+		name:  info.Name(),
+		path:  info.Path(),
+		set:   make(map[string]struct{}, len(info.Songs())),
 	}
-
 	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		idx := playlist.currentIdx
 
 		if e.Key() == tcell.KeyEscape {
 			if len(playlist.List.GetSelectedItems()) != 0 {
@@ -51,16 +51,22 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 		}
 		switch e.Rune() {
 		case ' ':
-			idx := playlist.currentIdx
 			if idx < 0 || idx >= len(playlist.songs) {
 				return e
 			}
 
-			if err := playlist.Play(idx); err != nil {
-				errorPopup(err)
+			playlist.Play(idx)
+		case 'a':
+			if idx < 0 || idx >= len(playlist.songs) {
+				return e
 			}
+			song := playlist.songs[idx]
+
+			thunder.PlayPanel.queue.enqueue(song)
+
+			text := fmt.Sprintf("[ %s ]\nSong added to queue", song.Name())
+			infoPopup(text)
 		case 'd':
-			idx := playlist.currentIdx
 			if len(playlist.songs) == 0 ||
 				idx < 0 ||
 				idx >= len(playlist.songs) {
@@ -71,13 +77,9 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 				popupText := fmt.Sprintf("Are you sure you want to remove the selected songs from the playlist?\nNumber of songs to be removed: %d", len(selectedItems))
 				confirmationPopup(popupText, func(_ int, label string) {
 					if label == "yes" {
-						popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from playlist?", "hi")
-						confirmationPopup(popupText, func(_ int, label string) {
-							if label == "yes" {
-								playlist.Remove(idx)
-								playlist.UpdateInfo()
-							}
-						})
+						playlist.RemoveSelected()
+						playlist.List.ClearSelected()
+						playlist.UpdateInfo()
 					}
 				})
 				return e
@@ -103,7 +105,7 @@ func NewPlaylist(info PlaylistInfo) *Playlist {
 	for i, song := range info.Songs() {
 		playlist.List.InsertItem(i, song, song.Name(), nil, nil)
 		playlist.songs = append(playlist.songs, song)
-		playlist.unique[song.Path()] = struct{}{}
+		playlist.set[song.Path()] = struct{}{}
 	}
 
 	playlist.UpdateInfo()
@@ -134,7 +136,7 @@ func (p *Playlist) add(song Song) {
 
 	p.List.InsertItem(itemIdx, song, song.Name(), nil, nil)
 	p.songs = append(p.songs, song)
-	p.unique[song.Path()] = struct{}{}
+	p.set[song.Path()] = struct{}{}
 
 	p.List.SetCurrentIdx(itemIdx)
 	p.currentIdx = itemIdx
@@ -171,7 +173,7 @@ func (p *Playlist) Remove(idx int) {
 	}
 	song := p.songs[idx]
 
-	delete(p.unique, song.Path())
+	delete(p.set, song.Path())
 	p.List.RemoveItem(idx)
 	p.songs = append(p.songs[:idx], p.songs[idx+1:]...)
 
@@ -232,9 +234,14 @@ func (p *Playlist) UpdateTitle() {
 	p.updateTitle()
 }
 
-func (p *Playlist) Play(idx int) error {
+func (p *Playlist) Play(idx int) {
+	if idx < 0 || idx >= len(p.songs) {
+		return
+	}
 
-	return nil
+	songs := p.songs[idx:]
+
+	thunder.PlayPanel.queue.PlayQueue(songs)
 }
 
 func (p *Playlist) CheckIsEmpty() {
@@ -262,7 +269,7 @@ func (p *Playlist) GetModified() bool {
 }
 
 func (p *Playlist) IsUnique(song Song) bool {
-	_, ok := p.unique[song.Path()]
+	_, ok := p.set[song.Path()]
 	return !ok
 	// IsUnique() = true = not in playlist ; IsUnique() = false = already in playlist
 }

@@ -102,6 +102,7 @@ func (p *timedPopup) Show() {
 
 func (p *timedPopup) Hide() {
 	thunder.Pages.RemovePage(p.id)
+	p.Close()
 }
 
 func (p *timedPopup) Primitive() tview.Primitive {
@@ -139,9 +140,6 @@ func newStack() stack {
 			slice = slice[:len(slice)-1]
 			return res
 		},
-		Top: func() Popup {
-			return slice[len(slice)-1]
-		},
 		Length: func() int {
 			return len(slice)
 		},
@@ -149,16 +147,14 @@ func newStack() stack {
 }
 
 type PopupManager struct {
-	popups         map[string]Popup
 	prevTimedPopup Popup
 	stack          stack
-	mu             sync.RWMutex
+	mu             sync.Mutex
 }
 
 func NewPopupManager() *PopupManager {
 	return &PopupManager{
-		popups: make(map[string]Popup),
-		stack:  newStack(),
+		stack: newStack(),
 	}
 }
 
@@ -192,6 +188,7 @@ func (pm *PopupManager) Show(p Popup) {
 		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, 70, 7), true, false)
 
 		if popup.focusable {
+			thunder.UnfocusAll()
 			thunder.SetFocusPanel(nil, popup.primitive.(Panel)) // TODO
 		}
 
@@ -213,33 +210,34 @@ func (pm *PopupManager) Show(p Popup) {
 			})
 		}()
 	}
-	pm.popups[p.ID()] = p
 }
 
 func (pm *PopupManager) Hide(popup Popup) {
 	popup.Hide()
 	pm.SwitchFocus(popup)
-	delete(pm.popups, popup.ID())
 }
 
 func (pm *PopupManager) SwitchFocus(prev Popup) {
 	pm.mu.Lock()
+	defer pm.mu.Unlock()
 	if pm.stack.Length() == 0 {
 		thunder.ResetFocus()
-		pm.mu.Unlock()
 		return
 	}
 
-	popup := pm.stack.Pop()
+	curr := pm.stack.Pop()
 
-	if !popup.Focusable() {
-		pm.mu.Unlock()
-		pm.SwitchFocus(popup)
+	prevPanel := prev.Primitive().(Panel)
+
+	var currPanel Panel
+
+	if !curr.Focusable() || curr == prev {
+		thunder.ResetFocus()
 		return
 	}
 
-	thunder.SetFocusPanel(prev.Primitive().(Panel), popup.Primitive().(Panel))
-	pm.mu.Unlock()
+	currPanel = curr.Primitive().(Panel)
+	thunder.SetFocusPanel(prevPanel, currPanel)
 }
 
 func (pm *PopupManager) Get(id string, popup Popup) {}
@@ -263,8 +261,6 @@ func confirmationPopup(text string, handler func(int, string)) {
 			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 		case 'k':
 			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-		case ' ':
-			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 		}
 
 		return e

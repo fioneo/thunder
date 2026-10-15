@@ -61,11 +61,12 @@ func (s *Selection) Toggle(item Selectable) {
 }
 
 type listItem struct {
-	item          Selectable
-	text          string
-	style         *tcell.Style
-	selectedStyle *tcell.Style
-	highlight     bool
+	item                   Selectable
+	text                   string
+	style                  *tcell.Style
+	selectedStyle          *tcell.Style
+	highlightStyle         *tcell.Style
+	highlightSelectedStyle *tcell.Style
 }
 
 type List struct {
@@ -110,6 +111,17 @@ func NewList() *List {
 func (l *List) Grow(capacity int) *List {
 	l.items = make([]*listItem, 0, capacity)
 	return l
+}
+
+func (l *List) SetItemHighlightedStyle(idx int, highlightStyle *tcell.Style, highlightSelectedStyle *tcell.Style) {
+	if idx < 0 || idx >= len(l.items) {
+		return
+	}
+
+	listItem := l.items[idx]
+
+	listItem.highlightStyle = highlightStyle
+	listItem.highlightSelectedStyle = highlightSelectedStyle
 }
 
 func (l *List) SetItemOffset(items int) *List {
@@ -174,9 +186,9 @@ func (l *List) InsertItem(idx int, item Selectable, text string, style, selected
 		idx = len(l.items)
 	}
 
-	if l.currentIdx < len(l.items) && l.currentIdx >= idx {
-		l.currentIdx++
-	}
+	// if l.currentIdx < len(l.items) && l.currentIdx >= idx {
+	// 	l.currentIdx++
+	// }
 
 	l.items = append(l.items, nil)
 	if idx < len(l.items)-1 {
@@ -317,14 +329,16 @@ func (l *List) Draw(screen tcell.Screen) {
 			break
 		}
 
-		current := index == l.currentIdx && (!l.selectedFocusOnly || l.HasFocus())
+		checkFocus := !l.selectedFocusOnly || l.HasFocus()
+
+		current := index == l.currentIdx && checkFocus
 		style := l.textStyle
 		if listItem.style != nil {
 			style = *listItem.style
 		}
 
 		selectedStyle := l.selectedStyle
-		selected := l.selection.Exist(listItem.item)
+		selected := l.selection.Exist(listItem.item) && checkFocus
 
 		if current {
 			if listItem.selectedStyle != nil {
@@ -334,8 +348,22 @@ func (l *List) Draw(screen tcell.Screen) {
 			}
 		}
 
+		highlightStyle := tcell.StyleDefault
+		highlightSelectedStyle := tcell.StyleDefault
+		highlighted := listItem.highlightStyle != nil && listItem.highlightSelectedStyle != nil
+
+		if highlighted {
+			highlightStyle = *listItem.highlightStyle
+			highlightSelectedStyle = *listItem.highlightSelectedStyle
+			if current {
+				style = highlightSelectedStyle
+			} else {
+				style = highlightStyle
+			}
+		}
+
 		text := listItem.text
-		printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, false)
+		printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, highlightStyle, highlighted)
 		if printedWidth > maxWidth {
 			maxWidth = printedWidth
 		}
@@ -371,8 +399,6 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 		switch e.Key() {
 		case tcell.KeyCtrlA:
 			l.updateSelectionRange(0, len(l.items)-1, true)
-		case tcell.KeyEscape:
-			l.ClearSelected()
 		case tcell.KeyDown:
 			if e.Modifiers()&tcell.ModShift != 0 {
 				if l.anchorIdx == -1 {
@@ -475,3 +501,28 @@ func (l *List) updateSelectionRange(anchor, current int, add bool) {
 		}
 	}
 }
+
+// func (l *List) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+// 	return l.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+// 		if !l.InRect(event.Position()) {
+// 			return false, nil
+// 		}
+//
+// 		switch action {
+// 		case tview.MouseScrollUp:
+// 			l.itemOffset--
+// 			consumed = true
+// 		case tview.MouseScrollDown:
+// 			l.itemOffset++
+// 			consumed = true
+// 		case tview.MouseScrollLeft:
+// 			l.horizontalOffset--
+// 			consumed = true
+// 		case tview.MouseScrollRight:
+// 			l.horizontalOffset++
+// 			consumed = true
+// 		}
+//
+// 		return
+// 	})
+// }

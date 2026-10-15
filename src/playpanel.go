@@ -8,13 +8,16 @@ import (
 
 type PlayPanel struct {
 	*tview.Pages
-	playlist *Playlist
-	queue    *Queue
+	playlist    *Playlist
+	queue       *Queue
+	currentPage string
 }
 
 func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 	playlist := NewPlaylist(info)
-	queue := NewQueue(info.Songs())
+	queue := NewQueue()
+	queue.Grow(len(info.Songs()))
+
 	pages := tview.NewPages().
 		AddPage("playlist", playlist, true, true).
 		AddPage("queue", queue, true, false)
@@ -28,15 +31,19 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 	playpanel.SetInputCapture((func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 'q':
-			currentPage, _ := playpanel.GetFrontPage()
+			currentPage := playpanel.currentPage
 
 			if currentPage == "playlist" {
 				playpanel.SwitchToPage("queue")
-				playpanel.queue.UpdateTitle()
+				playpanel.currentPage = "queue"
+				playpanel.queue.UpdateInfo()
 				break
 			}
+
 			playpanel.SwitchToPage("playlist")
-			playpanel.playlist.UpdateTitle()
+			playpanel.currentPage = "playlist"
+			playpanel.playlist.UpdateInfo()
+
 		}
 		return event
 	}))
@@ -67,6 +74,7 @@ func NewPlayPanel(info PlaylistInfo) *PlayPanel {
 		SetBackgroundColor(thunder.Colors.Background)
 
 	playpanel.playlist.UpdateTitle()
+	playpanel.currentPage = "playlist"
 	return playpanel
 }
 

@@ -19,14 +19,27 @@ func fileToSong(file File) Song {
 	return NewSong(file.Name(), file.Path())
 }
 
-func directoryToPlaylistInfo(name, path string, files []File) playlistInfo {
+func filesToSongs(files []File) []Song {
 	songs := make([]Song, 0, len(files))
-
-	for _, file := range files {
-		if file.IsDir() {
+	for _, f := range files {
+		if f.IsDir() {
 			continue
 		}
-		song := NewSong(file.Name(), file.Path())
+		song := fileToSong(f)
+
+		songs = append(songs, song)
+	}
+	return songs
+}
+
+func directoryToPlaylistInfo(name, path string, files []File) *playlistInfo {
+	songs := make([]Song, 0, len(files))
+
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		song := fileToSong(f)
 
 		songs = append(songs, song)
 	}
@@ -34,25 +47,38 @@ func directoryToPlaylistInfo(name, path string, files []File) playlistInfo {
 	return NewPlaylistInfo(name, path, songs)
 }
 
-func printWithStyle(screen tcell.Screen, text string, x, y, skipWidth, maxWidth int, style tcell.Style, maintainBackground bool) (start, end, printedWidth int) {
+func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth int, style tcell.Style, selectedStyle tcell.Style, selected bool, highlightStyle tcell.Style, highlighted bool) (printedWidth int) {
 	totalWidth, totalHeight := screen.Size()
 	if maxWidth <= 0 || len(text) == 0 || y < 0 || y >= totalHeight {
-		return 0, 0, 0
+		return 0
 	}
-
 	runes := []rune(text)
 
 	if skipWidth > 0 {
 		if skipWidth >= len(runes) {
-			return len(runes), len(runes), 0
+			return 0
 		}
-		start = skipWidth
 		runes = runes[skipWidth:]
 	}
 
 	if len(runes) > maxWidth {
 		runes = runes[:maxWidth]
 	}
+
+	if selected {
+		screen.SetContent(x, y, ' ', nil, selectedStyle)
+	} else {
+		screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
+	}
+
+	// else if highlighted {
+	// 		screen.SetContent(x, y, ' ', nil, highlightStyle)
+	// 	}
+
+	x++
+	screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
+	x++
+	printedWidth += 2
 
 	rightBorder := x + len(runes)
 
@@ -63,14 +89,14 @@ func printWithStyle(screen tcell.Screen, text string, x, y, skipWidth, maxWidth 
 
 		if x >= 0 {
 			finalStyle := style
-			if maintainBackground {
-				_, currentBg, _ := style.Decompose()
-				if currentBg == tcell.ColorDefault {
-					_, _, existingStyle, _ := screen.GetContent(x, y)
-					_, screenBg, _ := existingStyle.Decompose()
-					finalStyle = finalStyle.Background(screenBg)
-				}
-			}
+			// if maintainBackground {
+			// 	_, currentBg, _ := style.Decompose()
+			// 	if currentBg == tcell.ColorDefault {
+			// 		_, _, existingStyle, _ := screen.GetContent(x, y)
+			// 		_, screenBg, _ := existingStyle.Decompose()
+			// 		finalStyle = finalStyle.Background(screenBg)
+			// 	}
+			// }
 
 			screen.SetContent(x, y, r, nil, finalStyle)
 		}
@@ -78,6 +104,5 @@ func printWithStyle(screen tcell.Screen, text string, x, y, skipWidth, maxWidth 
 		printedWidth++
 	}
 
-	end = start + printedWidth
-	return start, end, printedWidth
+	return printedWidth
 }

@@ -104,3 +104,36 @@ func (f *file) Name() string {
 func (f *file) Path() string {
 	return f.path
 }
+
+type Set struct {
+	items map[string]struct{}
+}
+
+func NewSet() *Set {
+	return &Set{
+		items: make(map[string]struct{}),
+	}
+}
+
+func (s *Set) Add(path string) {
+	s.items[path] = struct{}{}
+}
+
+func (s *Set) Remove(path string) {
+	delete(s.items, path)
+}
+
+func (s *Set) Exist(path string) bool {
+	_, ok := s.items[path]
+
+	return ok
+}
+
+func (s *Set) Grow(capacity int) {
+	s.items = make(map[string]struct{}, capacity)
+}
+
+func (s *Set) Clear() {
+	s.items = make(map[string]struct{})
+}
+

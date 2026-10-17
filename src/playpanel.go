@@ -1,83 +1,83 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
+const (
+	playlistPage = "playlist"
+	queuePage    = "queue"
+)
+
 type PlayPanel struct {
 	*tview.Pages
-	playlist    *Playlist
-	queue       *Queue
-	currentPage string
+	playlist *Playlist
+	queue    *QueueView
+
+	current string
 }
 
-func NewPlayPanel(info PlaylistInfo) *PlayPanel {
-	playlist := NewPlaylist(info)
-	queue := NewQueue()
-	queue.Grow(len(info.Songs()))
+func NewPlayPanel(info PlaylistInfo, ctrl *PlaybackController) *PlayPanel {
+	playlist := NewPlaylist(info, ctrl)
+	queue := NewQueueView(ctrl)
 
-	pages := tview.NewPages().
-		AddPage("playlist", playlist, true, true).
-		AddPage("queue", queue, true, false)
-
-	playpanel := &PlayPanel{
-		Pages:    pages,
+	p := &PlayPanel{
+		Pages: tview.NewPages().
+			AddPage(playlistPage, playlist, true, true).
+			AddPage(queuePage, queue, true, false),
 		playlist: playlist,
 		queue:    queue,
+		current:  playlistPage,
 	}
 
-	playpanel.SetInputCapture((func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case 'q':
-			currentPage := playpanel.currentPage
+	playlist.SetUpdateFunc(p.refreshTitle)
+	queue.SetUpdateFunc(p.refreshTitle)
 
-			if currentPage == "playlist" {
-				playpanel.SwitchToPage("queue")
-				playpanel.currentPage = "queue"
-				playpanel.queue.UpdateInfo()
-				break
-			}
-
-			playpanel.SwitchToPage("playlist")
-			playpanel.currentPage = "playlist"
-			playpanel.playlist.UpdateInfo()
-
+	p.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
+		if e.Rune() == 'q' {
+			p.togglePage()
 		}
-		return event
-	}))
-
-	playlist.SetUpdateTitleFunc(func() {
-		title := fmt.Sprintf(
-			"─ %s ──┤ %d songs | %s ├",
-			playpanel.playlist.name,
-			len(playpanel.playlist.songs),
-			playpanel.playlist.mode.ToString(),
-		)
-		playpanel.SetTitle(title)
+		return e
 	})
 
-	queue.SetUpdateTitleFunc(func() {
-		title := fmt.Sprintf(
-			"─ %s ──┤ %d songs | %s ├",
-			"Queue",
-			len(playpanel.queue.songs),
-			playpanel.queue.mode.ToString(),
-		)
-		playpanel.SetTitle(title)
-	})
-
-	playpanel.SetBorder(true).
+	p.SetBorder(true).
 		SetBorderColor(thunder.Colors.Foreground).
 		SetTitleColor(thunder.Colors.Foreground).
 		SetBackgroundColor(thunder.Colors.Background)
 
-	playpanel.playlist.UpdateTitle()
-	playpanel.currentPage = "playlist"
-	return playpanel
+	p.queue.Render(ctrl.Snapshot())
+	p.refreshTitle()
+	return p
+}
+
+func (p *PlayPanel) togglePage() {
+	if p.current == playlistPage {
+		p.current = queuePage
+	} else {
+		p.current = playlistPage
+	}
+	p.SwitchToPage(p.current)
+
+	if p.HasFocus() && thunder != nil && thunder.App != nil {
+		thunder.App.SetFocus(p)
+	}
+	p.refreshTitle()
+}
+
+func (p *PlayPanel) refreshTitle() {
+	if p.current == queuePage {
+		p.SetTitle(p.queue.Title())
+		return
+	}
+	p.SetTitle(p.playlist.Title())
+}
+
+func (p *PlayPanel) Render(s Snapshot) {
+	p.queue.Render(s)
+	p.refreshTitle()
 }
 
 func (p *PlayPanel) UpdateInfo(info PlaylistInfo) {
-	*p = *NewPlayPanel(info)
+	p.playlist.SetInfo(info)
 }

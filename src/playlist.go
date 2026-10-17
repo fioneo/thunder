@@ -2,274 +2,230 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"sort"
+)
+
+const (
+	playlistPageList  = "list"
+	playlistPageEmpty = "empty"
 )
 
 type Playlist struct {
 	*tview.Pages
-	List        *List
-	songs       []Song
-	currentIdx  int
-	currentSong int
-	mode        PlayMode
-	name        string
-	path        string
-	modified    bool
-	set         map[string]struct{}
-	updateTitle func()
+	list *List
+	ctrl *PlaybackController
+
+	songs    []Song
+	name     string
+	path     string
+	modified bool
+	onUpdate func()
 }
 
-func NewPlaylist(info PlaylistInfo) *Playlist {
-	if info == nil {
-		return &Playlist{}
-	}
+func NewPlaylist(info PlaylistInfo, ctrl *PlaybackController) *Playlist {
+	colors := thunder.Colors
+
 	list := NewList()
-	emptyPlaylistText := tview.NewTextView().SetText(" empty playlist").
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
-	pages := tview.NewPages().
-		AddPage("playlist", list, true, true).
-		AddPage("empty_playlist", emptyPlaylistText, true, false)
+	list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
 
-	playlist := &Playlist{
-		Pages: pages,
-		List:  list,
-		mode:  DefaultMode,
-		name:  info.Name(),
-		path:  info.Path(),
-		set:   make(map[string]struct{}, len(info.Songs())),
-	}
-	playlist.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		idx := playlist.currentIdx
+	empty := tview.NewTextView().
+		SetText(" empty playlist").
+		SetTextStyle(tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background))
 
-		if e.Key() == tcell.KeyEscape {
-			if len(playlist.List.GetSelectedItems()) != 0 {
-				playlist.List.ClearSelected()
-				playlist.UpdateTitle()
-			}
-		}
-		switch e.Rune() {
-		case ' ':
-			if idx < 0 || idx >= len(playlist.songs) {
-				return e
-			}
-
-			playlist.Play(idx)
-		case 'a':
-			if idx < 0 || idx >= len(playlist.songs) {
-				return e
-			}
-			song := playlist.songs[idx]
-
-			thunder.PlayPanel.queue.enqueue(song)
-
-			text := fmt.Sprintf("[ %s ]\nSong added to queue", song.Name())
-			infoPopup(text)
-		case 'd':
-			if len(playlist.songs) == 0 ||
-				idx < 0 ||
-				idx >= len(playlist.songs) {
-				return e
-			}
-			selectedItems := playlist.List.GetSelectedItems()
-			if len(selectedItems) > 0 {
-				popupText := fmt.Sprintf("Are you sure you want to remove the selected songs from the playlist?\nNumber of songs to be removed: %d", len(selectedItems))
-				confirmationPopup(popupText, func(_ int, label string) {
-					if label == "yes" {
-						playlist.RemoveSelected()
-						playlist.List.ClearSelected()
-						playlist.UpdateInfo()
-					}
-				})
-				return e
-			}
-
-			song := playlist.songs[idx]
-			popupText := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from playlist?", song.Name())
-			confirmationPopup(popupText, func(_ int, label string) {
-				if label == "yes" {
-					playlist.Remove(idx)
-					playlist.UpdateInfo()
-				}
-			})
-		}
-		return e
-	})
-
-	playlist.List.SetChangedFunc(func(idx int, _ string) {
-		playlist.currentIdx = idx
-		playlist.UpdateInfo()
-	})
-
-	for i, song := range info.Songs() {
-		playlist.List.InsertItem(i, song, song.Name(), nil, nil)
-		playlist.songs = append(playlist.songs, song)
-		playlist.set[song.Path()] = struct{}{}
+	p := &Playlist{
+		Pages: tview.NewPages().
+			AddPage(playlistPageList, list, true, false).
+			AddPage(playlistPageEmpty, empty, true, true),
+		list: list,
+		ctrl: ctrl,
 	}
 
-	playlist.UpdateInfo()
+	list.SetChangedFunc(func(int, string) { p.notify() })
+	p.SetInputCapture(p.handleKey)
+	p.SetInfo(info)
+	return p
+}
 
-	playlist.List.
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-		SetSelectedFocusOnly(true).
-		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Selected)).
-		SetHighlightFullLine(true).
-		SetWrapAround(false).
-		SetBackgroundColor(thunder.Colors.Background)
-	return playlist
+func (p *Playlist) SetInfo(info PlaylistInfo) {
+	p.songs = nil
+	p.name, p.path = "", ""
+	if info != nil {
+		p.name, p.path = info.Name(), info.Path()
+		p.songs = append(p.songs, info.Songs()...)
+	}
+	p.modified = false
+	p.list.ClearSelected()
+	p.list.SetCurrentIdx(0)
+	p.refresh(0)
+}
+
+func (p *Playlist) SetUpdateFunc(fn func()) { p.onUpdate = fn }
+
+func (p *Playlist) notify() {
+	if p.onUpdate != nil {
+		p.onUpdate()
+	}
+}
+
+func (p *Playlist) Title() string {
+	pos := 0
+	if len(p.songs) > 0 {
+		pos = p.list.GetCurrentIdx() + 1
+	}
+	return fmt.Sprintf("─ %s ──┤ %d / %d | %s ├", p.name, pos, len(p.songs), p.ctrl.Mode().ToString())
+}
+
+func (p *Playlist) GetModified() bool { return p.modified }
+
+func (p *Playlist) refresh(cursor int) {
+	entries := make([]ListEntry, len(p.songs))
+	for i, song := range p.songs {
+		entries[i] = ListEntry{Item: song, Text: song.Name()}
+	}
+	p.list.Reset(entries)
+	p.list.SetCurrentIdx(min(max(cursor, 0), len(p.songs)-1))
+
+	if len(p.songs) == 0 {
+		p.SwitchToPage(playlistPageEmpty)
+	} else {
+		p.SwitchToPage(playlistPageList)
+	}
+	p.notify()
+}
+
+func (p *Playlist) add(songs []Song) (added, skipped int) {
+	seen := make(map[string]struct{}, len(p.songs)+len(songs))
+	for _, s := range p.songs {
+		seen[s.Path()] = struct{}{}
+	}
+
+	for _, s := range songs {
+		if _, dup := seen[s.Path()]; dup {
+			skipped++
+			continue
+		}
+		seen[s.Path()] = struct{}{}
+		p.songs = append(p.songs, s)
+		added++
+	}
+
+	if added > 0 {
+		p.modified = true
+		p.refresh(len(p.songs) - 1)
+	}
+	return added, skipped
 }
 
 func (p *Playlist) Insert(song Song) {
-	if p.IsUnique(song) {
-		p.add(song)
-		return
+	if _, skipped := p.add([]Song{song}); skipped > 0 {
+		infoPopup(fmt.Sprintf("[ %s ]\nThis song is already on the playlist.", song.Name()))
 	}
-	text := fmt.Sprintf("[ %s ]\nThis song is already on the playlist.", song.Name())
-
-	infoPopup(text)
-}
-
-func (p *Playlist) add(song Song) {
-	itemIdx := len(p.songs)
-
-	p.List.InsertItem(itemIdx, song, song.Name(), nil, nil)
-	p.songs = append(p.songs, song)
-	p.set[song.Path()] = struct{}{}
-
-	p.List.SetCurrentIdx(itemIdx)
-	p.currentIdx = itemIdx
-	p.List.SetItemOffset(itemIdx)
-	p.SetIsModified(true)
-	p.UpdateInfo()
 }
 
 func (p *Playlist) InsertAll(songs []Song) {
-	added := 0
-	existing := 0
-	for _, song := range songs {
-		if p.IsUnique(song) {
-			p.add(song)
-			added++
-		} else {
-			existing++
-		}
-	}
-
-	if existing > 0 {
-		text := fmt.Sprintf("Songs added: %d\nSongs already in the playlist: %d", added, existing)
-		infoPopup(text)
+	added, skipped := p.add(songs)
+	if skipped > 0 {
+		infoPopup(fmt.Sprintf("Songs added: %d\nSongs already in the playlist: %d", added, skipped))
 	}
 }
 
-func (p *Playlist) Remove(idx int) {
-	if len(p.songs) == 0 {
+func (p *Playlist) remove(paths ...string) {
+	drop := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		drop[path] = struct{}{}
+	}
+
+	kept := p.songs[:0]
+	for _, s := range p.songs {
+		if _, ok := drop[s.Path()]; !ok {
+			kept = append(kept, s)
+		}
+	}
+	clear(p.songs[len(kept):])
+	if len(kept) == len(p.songs) {
 		return
 	}
 
-	if idx < 0 || idx >= len(p.songs) {
+	p.songs = kept
+	p.modified = true
+	p.refresh(p.list.GetCurrentIdx())
+}
+
+func (p *Playlist) targetSongs(idx int) []Song {
+	if selected := p.list.GetSelectedItems(); len(selected) > 0 {
+		songs := make([]Song, len(selected))
+		for i, item := range selected {
+			songs[i] = item.(Song)
+		}
+		return songs
+	}
+	if idx >= 0 && idx < len(p.songs) {
+		return []Song{p.songs[idx]}
+	}
+	return nil
+}
+
+func (p *Playlist) handleKey(e *tcell.EventKey) *tcell.EventKey {
+	idx := p.list.GetCurrentIdx()
+
+	if e.Key() == tcell.KeyEscape {
+		p.list.ClearSelected()
+		return e
+	}
+
+	switch e.Rune() {
+	case ' ':
+		if idx >= 0 && idx < len(p.songs) && len(p.list.GetSelectedItems()) == 0 {
+			p.ctrl.PlayFrom(p.songs[idx:])
+		}
+	case 'a':
+		p.addToQueue(p.targetSongs(idx))
+	case 'd':
+		p.confirmRemove(idx)
+	}
+	return e
+}
+
+func (p *Playlist) addToQueue(songs []Song) {
+	if len(songs) == 0 {
 		return
 	}
-	song := p.songs[idx]
 
-	delete(p.set, song.Path())
-	p.List.RemoveItem(idx)
-	p.songs = append(p.songs[:idx], p.songs[idx+1:]...)
+	added, skipped := p.ctrl.Enqueue(songs...)
+	p.list.ClearSelected()
 
-	if p.currentIdx > idx || p.currentIdx == len(p.songs) {
-		p.currentIdx--
+	switch {
+	case len(songs) > 1:
+		infoPopup(fmt.Sprintf("Songs added to the queue: %d\nAlready in the queue: %d", added, skipped))
+	case added == 1:
+		infoPopup(fmt.Sprintf("[ %s ]\nSong added to the queue", songs[0].Name()))
+	default:
+		infoPopup(fmt.Sprintf("[ %s ]\nThis song is already in the queue", songs[0].Name()))
 	}
 }
 
-func (p *Playlist) RemoveSelected() {
-	selectedItems := p.List.GetSelectedItems()
-
-	if len(selectedItems) == 0 {
+func (p *Playlist) confirmRemove(idx int) {
+	songs := p.targetSongs(idx)
+	if len(songs) == 0 {
 		return
 	}
 
-	indices := make([]int, 0, len(selectedItems))
-
-	for _, item := range selectedItems {
-		for i, s := range p.songs {
-			if s.Path() == item.Path() {
-				indices = append(indices, i)
-				break
-			}
-		}
+	paths := make([]string, len(songs))
+	for i, s := range songs {
+		paths[i] = s.Path()
 	}
 
-	// This is crucial, because removing in ascending order shifts elements, and eventually we can get an index out of range (panic)
-	sort.Slice(indices, func(i, j int) bool {
-		return indices[i] > indices[j]
+	text := fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from playlist?", songs[0].Name())
+	if len(songs) > 1 {
+		text = fmt.Sprintf("Are you sure you want to remove the selected songs from the playlist?\nNumber of songs to be removed: %d", len(songs))
+	}
+
+	confirmationPopup(text, func(_ int, label string) {
+		if label == "yes" {
+			p.remove(paths...)
+			p.list.ClearSelected()
+		}
 	})
-
-	for _, idx := range indices {
-		p.Remove(idx)
-
-	}
-}
-
-func (p *Playlist) TogglePause() {
-	thunder.Player.TogglePause()
-}
-
-func (p *Playlist) SwitchMode() {
-	switch p.mode {
-	case DefaultMode:
-		p.mode = RepeatMode
-	case RepeatMode:
-		p.mode = RandomMode
-	case RandomMode:
-		p.mode = DefaultMode
-	}
-}
-
-func (p *Playlist) SetUpdateTitleFunc(updateTitleFunc func()) {
-	p.updateTitle = updateTitleFunc
-}
-
-func (p *Playlist) UpdateTitle() {
-	p.updateTitle()
-}
-
-func (p *Playlist) Play(idx int) {
-	if idx < 0 || idx >= len(p.songs) {
-		return
-	}
-
-	songs := p.songs[idx:]
-
-	thunder.PlayPanel.queue.PlayQueue(songs)
-}
-
-func (p *Playlist) CheckIsEmpty() {
-	if len(p.songs) == 0 {
-		p.SwitchToPage("empty_playlist")
-	} else {
-		p.SwitchToPage("playlist")
-	}
-}
-
-func (p *Playlist) UpdateInfo() {
-	p.CheckIsEmpty()
-	if p.updateTitle == nil {
-		return
-	}
-	p.UpdateTitle()
-}
-
-func (p *Playlist) SetIsModified(modified bool) {
-	p.modified = modified
-}
-
-func (p *Playlist) GetModified() bool {
-	return p.modified
-}
-
-func (p *Playlist) IsUnique(song Song) bool {
-	_, ok := p.set[song.Path()]
-	return !ok
-	// IsUnique() = true = not in playlist ; IsUnique() = false = already in playlist
 }

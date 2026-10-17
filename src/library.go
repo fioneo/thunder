@@ -10,26 +10,22 @@ import (
 	"strings"
 )
 
-var allowedExt = ".mp3"
-
 type Library struct {
 	*tview.Frame
-	List        *List
+	list        *List
 	files       []File
 	currentPath string
 	currentIdx  int
 	idxHistory  map[string]int
 }
 
-func NewLibrary(dir string) *Library {
-	path := filepath.Join(dir, "Music")
-
+func NewLibrary(path string) *Library {
 	list := NewList()
 	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
 
 	library := &Library{
 		Frame:       frame,
-		List:        list,
+		list:        list,
 		currentPath: path,
 		idxHistory:  make(map[string]int),
 	}
@@ -38,7 +34,7 @@ func NewLibrary(dir string) *Library {
 		exit(err)
 	}
 
-	library.List.SetChangedFunc(func(idx int, _ string) {
+	library.list.SetChangedFunc(func(idx int, _ string) {
 		library.currentIdx = idx
 		library.UpdateInfo()
 	})
@@ -50,14 +46,14 @@ func NewLibrary(dir string) *Library {
 		case tcell.KeyCtrlR:
 			library.readDir(library.currentPath)
 		case tcell.KeyEscape:
-			if len(library.List.GetSelectedItems()) != 0 {
-				library.List.ClearSelected()
+			if len(library.list.GetSelectedItems()) != 0 {
+				library.list.ClearSelected()
 				library.UpdateInfo()
 			}
 		}
 		switch e.Rune() {
 		case 'l':
-			selectedItems := library.List.GetSelectedItems()
+			selectedItems := library.list.GetSelectedItems()
 
 			if len(selectedItems) > 0 {
 				files := make([]File, 0, len(selectedItems))
@@ -68,7 +64,7 @@ func NewLibrary(dir string) *Library {
 
 				songs := filesToSongs(files)
 				thunder.PlayPanel.playlist.InsertAll(songs)
-				library.List.ClearSelected()
+				library.list.ClearSelected()
 				library.UpdateInfo()
 				return e
 			}
@@ -108,16 +104,16 @@ func NewLibrary(dir string) *Library {
 					return e
 				}
 				library.currentIdx = idx
-				library.List.SetCurrentIdx(idx)
+				library.list.SetCurrentIdx(idx)
 			}
 		case 'd':
-			selectedItems := library.List.GetSelectedItems()
+			selectedItems := library.list.GetSelectedItems()
 			if len(selectedItems) > 0 {
 				popupText := fmt.Sprintf("Are you sure you want to delete the selected files?\nNumber of files to be deleted: %d", len(selectedItems))
 				confirmationPopup(popupText, func(_ int, label string) {
 					if label == "yes" {
 						library.RemoveSelected()
-						library.List.ClearSelected()
+						library.list.ClearSelected()
 						library.UpdateInfo()
 					}
 				})
@@ -187,14 +183,8 @@ func NewLibrary(dir string) *Library {
 		return e
 	})
 
-	library.List.
-		SetTextStyle(library.songStyle()).
-		SetCurrentItemStyle(library.songSelectedStyle()).
-		SetHighlightFullLine(true).
-		SetSelectedFocusOnly(true).
-		SetWrapAround(false).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(thunder.Colors.Selected).Background(thunder.Colors.Selected)).
-		SetBackgroundColor(thunder.Colors.Background)
+	colors := thunder.Colors
+	library.list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
 
 	library.
 		SetBorder(true).
@@ -214,14 +204,14 @@ func (l *Library) readDir(path string) error {
 	}
 
 	files := make([]File, 0, len(dirEntries))
-	l.List.Grow(len(dirEntries))
+	l.list.Grow(len(dirEntries))
 	l.Frame.Clear()
 	l.Clear()
 
 	if len(dirEntries) != 0 {
 		idx := 0
 		for _, entry := range dirEntries {
-			if !entry.IsDir() && filepath.Ext(entry.Name()) != allowedExt {
+			if !entry.IsDir() && filepath.Ext(entry.Name()) != ".mp3" {
 				continue
 			}
 			path := filepath.Join(path, entry.Name())
@@ -232,7 +222,7 @@ func (l *Library) readDir(path string) error {
 			files = append(files, file)
 
 			style, selectedStyle := l.GetStyle(file)
-			l.List.InsertItem(idx, file, file.Name(), style, selectedStyle)
+			l.list.InsertItem(idx, file, file.Name(), style, selectedStyle)
 			idx++
 		}
 	}
@@ -255,7 +245,7 @@ func (l *Library) Remove(idx int) error {
 		return err
 	}
 
-	l.List.RemoveItem(idx)
+	l.list.RemoveItem(idx)
 	l.files = append(l.files[:idx], l.files[idx+1:]...)
 
 	if len(l.files) == 0 {
@@ -272,7 +262,7 @@ func (l *Library) Remove(idx int) error {
 // TODO: Make it more simple, log errors
 
 func (l *Library) RemoveSelected() {
-	selectedItems := l.List.GetSelectedItems()
+	selectedItems := l.list.GetSelectedItems()
 
 	if len(selectedItems) == 0 {
 		return
@@ -311,7 +301,7 @@ func (l *Library) RemovePlaylist(idx int) error {
 		return err
 	}
 
-	l.List.RemoveItem(idx)
+	l.list.RemoveItem(idx)
 	l.files = append(l.files[:idx], l.files[idx+1:]...)
 
 	if len(l.files) == 0 {
@@ -327,7 +317,7 @@ func (l *Library) RemovePlaylist(idx int) error {
 
 func (l *Library) Clear() {
 	l.currentIdx = 0
-	l.List.Clear()
+	l.list.Clear()
 	l.files = nil
 }
 
@@ -347,7 +337,7 @@ func (l *Library) UpdateInfo() {
 }
 
 func (l *Library) CheckIsModified() bool {
-	return thunder.PlayPanel.playlist.isModified
+	return thunder.PlayPanel.playlist.GetModified()
 }
 
 // func (l *Library) CheckIsEmpty() {

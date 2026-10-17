@@ -1,193 +1,184 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
-type Queue struct {
-	*tview.Pages
-	List        *List
-	mode        PlayMode
-	songs       []Song
-	currentSong Song
-	currentIdx  int
-	done        chan struct{}
-	updateTitle func()
+const (
+	queuePageList  = "list"
+	queuePageEmpty = "empty"
+)
+
+type QueueView struct {
+	*tview.Flex
+	nowPlaying *tview.TextView
+	pages      *tview.Pages
+	list       *List
+
+	ctrl     *PlaybackController
+	snap     Snapshot
+	onUpdate func()
 }
 
-func NewQueue() *Queue {
+func NewQueueView(ctrl *PlaybackController) *QueueView {
+	colors := thunder.Colors
+	background := tcell.StyleDefault.Background(colors.Background)
+
 	list := NewList()
-	emptyQueueText := tview.NewTextView().SetText("  empty queue.").
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
+	list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
+
+	empty := tview.NewTextView().
+		SetText("  queue is empty").
+		SetTextStyle(background.Foreground(colors.Song))
+
+	nowPlaying := tview.NewTextView().
+		SetTextStyle(background.Foreground(colors.Highlighted))
+
 	pages := tview.NewPages().
-		AddPage("queue", list, true, true).
-		AddPage("empty_queue", emptyQueueText, true, false)
+		AddPage(queuePageList, list, true, false).
+		AddPage(queuePageEmpty, empty, true, true)
 
-	queue := &Queue{
-		Pages: pages,
-		List:  list,
-		mode:  DefaultMode,
-		done:  make(chan struct{}, 1),
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(nowPlaying, 1, 0, false).
+		AddItem(pages, 0, 1, true)
+
+	q := &QueueView{
+		Flex:       flex,
+		nowPlaying: nowPlaying,
+		pages:      pages,
+		list:       list,
+		ctrl:       ctrl,
 	}
-	pages.SwitchToPage("empty_queue")
 
-	queue.List.SetChangedFunc(func(idx int, _ string) {
-		queue.currentIdx = idx
-		queue.UpdateInfo()
-	})
-
-	queue.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if e.Key() == tcell.KeyEscape {
-			if len(queue.List.GetSelectedItems()) != 0 {
-				queue.List.ClearSelected()
-				queue.UpdateTitle()
-			}
-		}
-		return e
-	})
-
-	queue.List.
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)).
-		SetSelectedFocusOnly(true).
-		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Selected)).
-		SetHighlightFullLine(true).
-		SetWrapAround(false).
-		SetBackgroundColor(thunder.Colors.Background)
-	return queue
+	list.SetChangedFunc(func(int, string) { q.notify() })
+	q.SetInputCapture(q.handleKey)
+	return q
 }
 
-func (q *Queue) Grow(capacity int) {
-	q.songs = make([]Song, 0, capacity)
-	q.List.Grow(capacity)
+func (q *QueueView) SetUpdateFunc(fn func()) { q.onUpdate = fn }
+
+func (q *QueueView) notify() {
+	if q.onUpdate != nil {
+		q.onUpdate()
+	}
 }
 
-func (q *Queue) Length() int {
-	return len(q.songs)
-}
-
-func (q *Queue) Remove(i int) {
-	if len(q.songs) == 0 {
+func (q *QueueView) Render(s Snapshot) {
+	if s.Version < q.snap.Version {
 		return
 	}
-
-	if i < 0 || i >= len(q.songs) {
-		return
+	q.snap = s
+	entries := make([]ListEntry, len(s.Upcoming))
+	for i, song := range s.Upcoming {
+		entries[i] = ListEntry{Item: song, Text: song.Name()}
 	}
+	q.list.Reset(entries)
 
-	q.List.RemoveItem(i)
-	q.songs = append(q.songs[:i], q.songs[i+1:]...)
-
-	if i == len(q.songs) {
-		q.currentIdx--
-	}
-}
-
-func (q *Queue) next() {
-	if q.Length() == 0 {
-		return
-	}
-
-	song := q.Peek()
-
-	// play current
-	q.Play(song)
-}
-
-func (q *Queue) Clear() {
-	q.currentIdx = 0
-	q.currentSong = nil
-	q.songs = nil
-	q.List.Clear()
-}
-
-func (q *Queue) ChangeMode() {
-	// TODO
-}
-
-func (q *Queue) Peek() Song {
-	return q.songs[0]
-}
-
-func (q *Queue) GetCurrentSong() Song {
-	return q.currentSong
-}
-
-func (q *Queue) enqueue(song Song) {
-	q.songs = append(q.songs, song)
-	q.List.InsertItem(q.Length(), song, song.Name(), nil, nil)
-
-}
-
-func (q *Queue) dequeue() Song {
-	song := q.songs[0]
-	q.songs = q.songs[1:]
-	q.List.RemoveItem(0)
-
-	return song
-}
-
-func (q *Queue) SetUpdateTitleFunc(updateTitleFunc func()) {
-	q.updateTitle = updateTitleFunc
-}
-
-func (q *Queue) UpdateTitle() {
-	q.updateTitle()
-}
-
-func (q *Queue) CheckIsEmpty() {
-	if q.Length() == 0 {
-		q.SwitchToPage("empty_queue")
+	if len(entries) == 0 {
+		q.pages.SwitchToPage(queuePageEmpty)
 	} else {
-		q.SwitchToPage("queue")
+		q.pages.SwitchToPage(queuePageList)
 	}
+
+	q.nowPlaying.SetText(nowPlayingText(s))
+	q.notify()
 }
 
-func (q *Queue) UpdateInfo() {
-	q.CheckIsEmpty()
-	if q.updateTitle == nil {
+func nowPlayingText(s Snapshot) string {
+	if s.Now == nil {
+		return "  nothing playing"
+	}
+
+	return "  " + s.Now.Name()
+}
+
+func (q *QueueView) Title() string {
+	return fmt.Sprintf("─ Queue ──┤ %d %s | %s ├",
+		len(q.snap.Upcoming), songWord(len(q.snap.Upcoming)), q.snap.Mode.ToString())
+}
+
+func (q *QueueView) refresh() {
+	q.Render(q.ctrl.Snapshot())
+}
+
+func (q *QueueView) selectedPaths() []string {
+	selected := q.list.GetSelectedItems()
+	paths := make([]string, len(selected))
+	for i, item := range selected {
+		paths[i] = item.Path()
+	}
+	return paths
+}
+
+func (q *QueueView) handleKey(e *tcell.EventKey) *tcell.EventKey {
+	idx := q.list.GetCurrentIdx()
+	hasCurrent := idx >= 0 && idx < len(q.snap.Upcoming)
+
+	switch e.Key() {
+	case tcell.KeyEscape:
+		q.list.ClearSelected()
+		return e
+
+	case tcell.KeyUp, tcell.KeyDown:
+		if e.Modifiers()&tcell.ModCtrl == 0 {
+			return e
+		}
+		if hasCurrent && len(q.list.GetSelectedItems()) == 0 {
+			delta := 1
+			if e.Key() == tcell.KeyUp {
+				delta = -1
+			}
+			q.list.SetCurrentIdx(q.ctrl.Move(idx, delta))
+			q.refresh()
+		}
+		return nil
+	}
+
+	switch e.Rune() {
+	case ' ':
+		if hasCurrent {
+			q.ctrl.PlayAt(idx)
+			q.refresh()
+		}
+	case 'd':
+		q.confirmRemove(idx, hasCurrent)
+	case 'c':
+		if len(q.snap.Upcoming) > 0 {
+			confirmationPopup("Are you sure you want to clear the queue?", func(_ int, label string) {
+				if label == "yes" {
+					q.ctrl.Clear()
+					q.refresh()
+				}
+			})
+		}
+	}
+	return e
+}
+
+func (q *QueueView) confirmRemove(idx int, hasCurrent bool) {
+	paths := q.selectedPaths()
+	text := ""
+
+	switch {
+	case len(paths) > 0:
+		text = fmt.Sprintf("Are you sure you want to remove the selected songs from the queue?\nNumber of songs to be removed: %d", len(paths))
+	case hasCurrent:
+		song := q.snap.Upcoming[idx]
+		paths = []string{song.Path()}
+		text = fmt.Sprintf("[ %s ]\nAre you sure you want to remove the current song from queue?", song.Name())
+	default:
 		return
 	}
-	q.UpdateTitle()
-}
 
-func (q *Queue) PlayQueue(songs []Song) {
-	q.Clear()
-
-	if len(songs) == 0 {
-		return
-	}
-
-	for _, song := range songs {
-		q.enqueue(song)
-	}
-
-	q.next()
-}
-
-func (q *Queue) Play(song Song) {
-	q.currentSong = song
-
-	style, selectedStyle := q.currentSongStyle()
-	q.List.SetItemHighlightedStyle(0, style, selectedStyle)
-
-	thunder.Player.SetSongFinishFunc(func(song Song) {
-		q.dequeue()
+	confirmationPopup(text, func(_ int, label string) {
+		if label == "yes" {
+			q.ctrl.Remove(paths...)
+			q.list.ClearSelected()
+			q.refresh()
+		}
 	})
-
-	if err := thunder.Player.Play(song); err != nil {
-		errorPopup(err)
-	}
-}
-
-func (q *Queue) currentSongStyle() (*tcell.Style, *tcell.Style) {
-	style := tcell.StyleDefault.Foreground(thunder.Colors.Highlighted).Background(thunder.Colors.Background)
-	selectedStyle := tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Highlighted)
-
-	return &style, &selectedStyle
-}
-
-func (q *Queue) IsRunning() bool {
-	return thunder.Player.IsRunning()
 }

@@ -14,10 +14,11 @@ type Thunder struct {
 	Library         *Library
 	PlayPanel       *PlayPanel
 	PlayBar         *PlayBar
-	Player          *Player
+	Playback        *PlaybackController
 	Panels          []Panel
 	Popups          *PopupManager
 	Colors          *Colors
+	Server          *Server
 	CurrentPanelIdx int
 }
 
@@ -26,15 +27,40 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	if err != nil {
 		exit(err)
 	}
-	playlistInfo := NewDefaultPlaylistInfo(home)
-	t.Player = NewPlayer()
-	t.Library = NewLibrary(home)
-	t.PlayPanel = NewPlayPanel(playlistInfo)
-	t.PlayBar = NewPlayBar()
-	t.Pages = tview.NewPages()
+
 	t.App = app
-	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
+	t.Pages = tview.NewPages()
 	t.Popups = NewPopupManager()
+	t.Playback = NewPlaybackController(NewPlayer())
+
+	t.Library = NewLibrary(home)
+	t.PlayPanel = NewPlayPanel(NewDefaultPlaylistInfo(home), t.Playback)
+	t.PlayBar = NewPlayBar(t.Playback.Progress)
+	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
+	t.InitServer()
+
+	t.Playback.OnChange(func(s Snapshot) {
+		go app.QueueUpdateDraw(func() { t.renderPlayback(s) })
+	})
+	t.Playback.OnError(func(err error) {
+		go app.QueueUpdateDraw(func() { errorPopup(err) })
+	})
+	t.renderPlayback(t.Playback.Snapshot())
+}
+
+func (t *Thunder) InitServer() {
+	server, err := NewServer("/tmp/thunder.sock", t.Playback)
+	if err != nil {
+		exit(err)
+	}
+
+	t.Server = server
+}
+
+func (t *Thunder) renderPlayback(s Snapshot) {
+	t.PlayPanel.Render(s)
+	t.PlayBar.Render(s)
+	t.Server.Write(s)
 }
 
 func NewThunder() *Thunder {

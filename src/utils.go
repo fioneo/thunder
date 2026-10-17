@@ -2,17 +2,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/gdamore/tcell/v2"
 	"os"
+	"time"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func exit(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
-}
-
-func fmtError(status string, err error) error {
-	return fmt.Errorf("%s: %w", status, err)
 }
 
 func fileToSong(file File) Song {
@@ -71,10 +69,6 @@ func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth i
 		screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
 	}
 
-	// else if highlighted {
-	// 		screen.SetContent(x, y, ' ', nil, highlightStyle)
-	// 	}
-
 	x++
 	screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
 	x++
@@ -88,21 +82,43 @@ func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth i
 		}
 
 		if x >= 0 {
-			finalStyle := style
-			// if maintainBackground {
-			// 	_, currentBg, _ := style.Decompose()
-			// 	if currentBg == tcell.ColorDefault {
-			// 		_, _, existingStyle, _ := screen.GetContent(x, y)
-			// 		_, screenBg, _ := existingStyle.Decompose()
-			// 		finalStyle = finalStyle.Background(screenBg)
-			// 	}
-			// }
 
-			screen.SetContent(x, y, r, nil, finalStyle)
+			screen.SetContent(x, y, r, nil, style)
 		}
 		x++
 		printedWidth++
 	}
 
 	return printedWidth
+}
+
+func drawText(screen tcell.Screen, x, y, maxWidth int, text string, style tcell.Style) (printed int) {
+	for _, r := range text {
+		if printed >= maxWidth {
+			break
+		}
+		screen.SetContent(x+printed, y, r, nil, style)
+		printed++
+	}
+	return printed
+}
+
+// fmtDuration formats time duration as m:ss or h:mm:ss
+func fmtDuration(d time.Duration) string {
+	total := int(d.Round(time.Second).Seconds())
+	if total < 0 {
+		total = 0
+	}
+	h, m, s := total/3600, total/60%60, total%60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+func songWord(n int) string {
+	if n == 1 {
+		return "song"
+	}
+	return "songs"
 }

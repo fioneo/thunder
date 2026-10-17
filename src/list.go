@@ -60,6 +60,19 @@ func (s *Selection) Toggle(item Selectable) {
 	s.Add(item)
 }
 
+func (s *Selection) Retain(keep func(Selectable) bool) {
+	kept := s.items[:0]
+	for _, item := range s.items {
+		if keep(item) {
+			kept = append(kept, item)
+		} else {
+			delete(s.set, item.Path())
+		}
+	}
+	clear(s.items[len(kept):])
+	s.items = kept
+}
+
 type listItem struct {
 	item                   Selectable
 	text                   string
@@ -134,10 +147,11 @@ func (l *List) GetItemOffset() int {
 }
 
 func (l *List) SetCurrentIdx(idx int) *List {
-	if idx < 0 && idx >= len(l.items) {
+	if idx < 0 || idx >= len(l.items) {
 		return l
 	}
 	l.currentIdx = idx
+	l.adjustOffset()
 	return l
 }
 
@@ -240,6 +254,40 @@ func (l *List) RemoveItem(idx int) *List {
 	}
 
 	return l
+}
+
+type ListEntry struct {
+	Item Selectable
+	Text string
+}
+
+func (l *List) Reset(entries []ListEntry) {
+	present := make(map[string]struct{}, len(entries))
+	items := make([]*listItem, 0, len(entries))
+	for _, e := range entries {
+		items = append(items, &listItem{item: e.Item, text: e.Text})
+		present[e.Item.Path()] = struct{}{}
+	}
+	l.items = items
+
+	l.selection.Retain(func(item Selectable) bool {
+		_, ok := present[item.Path()]
+		return ok
+	})
+	l.anchorIdx = -1
+
+	l.currentIdx = min(max(l.currentIdx, 0), max(len(items)-1, 0))
+	l.adjustOffset()
+}
+
+func (l *List) ApplySongStyles(c *Colors) *List {
+	return l.
+		SetTextStyle(tcell.StyleDefault.Foreground(c.Song).Background(c.Background)).
+		SetSelectedFocusOnly(true).
+		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(c.Song)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(c.Selected)).
+		SetHighlightFullLine(true).
+		SetWrapAround(false)
 }
 
 func (l *List) GetItemCount() int {
@@ -526,3 +574,4 @@ func (l *List) updateSelectionRange(anchor, current int, add bool) {
 // 		return
 // 	})
 // }
+//

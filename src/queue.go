@@ -97,7 +97,7 @@ func nowPlayingText(s Snapshot) string {
 }
 
 func (q *QueueView) Title() string {
-	return fmt.Sprintf("─ Queue ──┤ %d %s | %s ├",
+	return fmt.Sprintf("─ Queue ──┤ %d %s │ %s ├",
 		len(q.snap.Upcoming), songWord(len(q.snap.Upcoming)), q.snap.Mode.ToString())
 }
 

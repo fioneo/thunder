@@ -1,11 +1,25 @@
 package main
 
 import (
-	"io"
+	"encoding/json"
 	"net"
 	"os"
 	"sync"
+	"time"
 )
+
+type Response struct {
+	// Name of the song.
+	Name string `json:"name"`
+	// Current position. Formats as m:ss or h:mm:ss.
+	Position string `json:"position"`
+	// Length of the song. Formats as m:ss or h:mm:ss.
+	Length string `json:"length"`
+	// Playing is true whether the current song is playing and it's not paused.
+	Playing bool `json:"playing"`
+	// Paused is here to distinguish between nothing is playing and the current song is paused.
+	Paused bool `json:"paused"`
+}
 
 type Server struct {
 	ctrl    *PlaybackController
@@ -51,11 +65,15 @@ func (s *Server) loop() {
 }
 
 func (s *Server) Write(snap Snapshot) {
-	var song string
-	if snap.Now != nil {
-		song = snap.Now.Name()
+
+	pos, length := thunder.Playback.Progress()
+	r := ResponseFromSnapshot(snap, pos, length)
+	line, err := json.Marshal(r)
+	if err != nil {
+		return
 	}
-	line := []byte(song + "\n")
+
+	line = append(line, byte('\n'))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -83,18 +101,14 @@ func (s *Server) serve(conn net.Conn) {
 		conn.Close()
 	}()
 
-	go func() {
-		for line := range ch {
-			if _, err := conn.Write(line); err != nil {
-				conn.Close()
-				return
-			}
-		}
-	}()
-
 	s.Write(s.ctrl.Snapshot())
 
-	_, _ = io.Copy(io.Discard, conn)
+	for line := range ch {
+		if _, err := conn.Write(line); err != nil {
+			conn.Close()
+			return
+		}
+	}
 }
 
 func (s *Server) Close() {
@@ -107,4 +121,18 @@ func (s *Server) Close() {
 	s.mu.Unlock()
 
 	_ = os.Remove(s.path)
+}
+
+func ResponseFromSnapshot(s Snapshot, pos, length time.Duration) Response {
+	name := ""
+	if s.Now != nil {
+		name = s.Now.Name()
+	}
+	return Response{
+		Name:     name,
+		Position: fmtDuration(pos),
+		Length:   fmtDuration(length),
+		Playing:  s.Active(),
+		Paused:   s.Paused,
+	}
 }

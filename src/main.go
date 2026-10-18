@@ -26,15 +26,18 @@ func InitApp(app *tview.Application) {
 		if pageName != "main" && !strings.Contains(pageName, "timeout_popup") {
 			return e
 		}
-		if e.Key() == tcell.KeyTab {
-			thunder.CyclePanels()
+		switch e.Key() {
+		case tcell.KeyTab:
+			thunder.CyclePanels(true)
+		case tcell.KeyBacktab:
+			thunder.CyclePanels(false)
 		}
 		return thunder.handlePlaybackKey(e)
 	})
 	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
 }
 
-func redrawWhilePlaying(app *tview.Application, done <-chan struct{}) {
+func redrawAndWrite(app *tview.Application, done <-chan struct{}) {
 	ticker := time.NewTicker(redrawInterval)
 	defer ticker.Stop()
 
@@ -43,9 +46,12 @@ func redrawWhilePlaying(app *tview.Application, done <-chan struct{}) {
 		case <-done:
 			return
 		case <-ticker.C:
-			if thunder.Playback.Snapshot().Active() {
+			s := thunder.Playback.Snapshot()
+			if s.Active() {
 				app.QueueUpdateDraw(func() {})
+				thunder.Server.Write(s)
 			}
+
 		}
 	}
 }
@@ -55,7 +61,7 @@ func main() {
 	InitApp(app)
 
 	done := make(chan struct{})
-	go redrawWhilePlaying(app, done)
+	go redrawAndWrite(app, done)
 
 	err := app.Run()
 

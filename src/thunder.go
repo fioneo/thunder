@@ -100,15 +100,23 @@ func DefaultColors() *Colors {
 	}
 }
 
-func (t *Thunder) CyclePanels() {
+func (t *Thunder) CyclePanels(forward bool) {
 	if len(t.Panels) == 0 {
 		return
 	}
-	prevPanel := t.Panels[t.CurrentPanelIdx]
-	t.CurrentPanelIdx++
 
-	if t.CurrentPanelIdx >= len(t.Panels) {
-		t.CurrentPanelIdx = 0
+	prevPanel := t.Panels[t.CurrentPanelIdx]
+
+	if forward {
+		t.CurrentPanelIdx++
+		if t.CurrentPanelIdx >= len(t.Panels) {
+			t.CurrentPanelIdx = 0
+		}
+	} else {
+		t.CurrentPanelIdx--
+		if t.CurrentPanelIdx < 0 {
+			t.CurrentPanelIdx = len(t.Panels) - 1
+		}
 	}
 
 	currentPanel := t.Panels[t.CurrentPanelIdx]

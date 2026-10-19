@@ -150,7 +150,7 @@ func (l *Library) RemoveSelected() {
 
 	for _, idx := range indices {
 		if err := l.Remove(idx); err != nil {
-			continue
+			SendErr(err)
 		}
 	}
 }
@@ -258,6 +258,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		path := file.Path()
 
 		if err := l.readDir(path); err != nil {
+			SendErr(err)
 			errorPopup(err)
 			return e
 		}
@@ -266,6 +267,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		path := filepath.Dir(l.currentPath)
 
 		if err := l.readDir(path); err != nil {
+			thunder.ErrCh <- err
 			errorPopup(err)
 			return e
 		}
@@ -304,6 +306,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			confirmationPopup(text, func(_ int, label string) {
 				if label == "yes" {
 					if err := l.RemovePlaylist(idx); err != nil {
+						SendErr(err)
 						errorPopup(err)
 					}
 				}
@@ -316,6 +319,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		confirmationPopup(text, func(_ int, label string) {
 			if label == "yes" {
 				if err := l.Remove(idx); err != nil {
+					SendErr(err)
 					errorPopup(err)
 				}
 			}

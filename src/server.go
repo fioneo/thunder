@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"sync"
@@ -22,11 +23,13 @@ type Response struct {
 }
 
 type Server struct {
-	ctrl    *PlaybackController
-	l       net.Listener
-	path    string
-	mu      sync.Mutex
-	clients map[net.Conn]chan []byte
+	ctrl      *PlaybackController
+	l         net.Listener
+	path      string
+	mu        sync.Mutex
+	clients   map[net.Conn]chan []byte
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 func NewServer(path string, ctrl *PlaybackController) (*Server, error) {
@@ -47,29 +50,47 @@ func NewServer(path string, ctrl *PlaybackController) (*Server, error) {
 		l:       l,
 		path:    path,
 		clients: make(map[net.Conn]chan []byte),
+		done:    make(chan struct{}),
 	}
-
+	thunder.Logger.Infof("Successfully initialized server on %s. Ready to accept connections", path)
 	go s.loop()
 
 	return s, nil
 }
 
 func (s *Server) loop() {
+	var delay time.Duration
 	for {
 		conn, err := s.l.Accept()
 		if err != nil {
-			return
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			if delay == 0 {
+				delay = 5 * time.Millisecond
+			} else if delay *= 2; delay > time.Second {
+				delay = time.Second
+			}
+			thunder.Logger.Errorf("accept connection: %s; retry in %s", err, delay)
+
+			select {
+			case <-time.After(delay):
+			case <-s.done:
+				return
+			}
+			continue
 		}
+		delay = 0
 		go s.serve(conn)
 	}
 }
 
 func (s *Server) Write(snap Snapshot) {
-
 	pos, length := thunder.Playback.Progress()
 	r := ResponseFromSnapshot(snap, pos, length)
 	line, err := json.Marshal(r)
 	if err != nil {
+		thunder.Logger.Errorf("marshal json: %s", err)
 		return
 	}
 
@@ -103,24 +124,31 @@ func (s *Server) serve(conn net.Conn) {
 
 	s.Write(s.ctrl.Snapshot())
 
-	for line := range ch {
-		if _, err := conn.Write(line); err != nil {
-			conn.Close()
+	for {
+		select {
+		case line := <-ch:
+			if _, err := conn.Write(line); err != nil {
+				thunder.Logger.Errorf("write to the client: %s", err)
+			}
+		case <-s.done:
 			return
 		}
 	}
 }
 
 func (s *Server) Close() {
-	s.l.Close()
-
-	s.mu.Lock()
-	for conn := range s.clients {
-		conn.Close()
-	}
-	s.mu.Unlock()
-
-	_ = os.Remove(s.path)
+	s.closeOnce.Do(
+		func() {
+			s.l.Close()
+			close(s.done)
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			for conn := range s.clients {
+				close(s.clients[conn])
+				conn.Close()
+			}
+		},
+	)
 }
 
 func ResponseFromSnapshot(s Snapshot, pos, length time.Duration) Response {

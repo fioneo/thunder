@@ -122,3 +122,13 @@ func songWord(n int) string {
 	}
 	return "songs"
 }
+
+func SendErr(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case thunder.ErrCh <- err:
+	default:
+	}
+}

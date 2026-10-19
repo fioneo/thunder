@@ -1,9 +1,11 @@
 package main
 
 import (
+	"github.com/fioneo/thunder/src/logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"os"
+	"sync"
 )
 
 var thunder *Thunder
@@ -19,7 +21,10 @@ type Thunder struct {
 	Popups          *PopupManager
 	Colors          *Colors
 	Server          *Server
+	Logger          *logger.Logger
+	ErrCh           chan error
 	CurrentPanelIdx int
+	stopOnce        sync.Once
 }
 
 func (t *Thunder) InitPanels(app *tview.Application) {
@@ -37,15 +42,16 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	t.PlayPanel = NewPlayPanel(NewDefaultPlaylistInfo(home), t.Playback)
 	t.PlayBar = NewPlayBar(t.Playback.Progress)
 	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
-	t.InitServer()
 
 	t.Playback.OnChange(func(s Snapshot) {
 		go app.QueueUpdateDraw(func() { t.renderPlayback(s) })
 	})
 	t.Playback.OnError(func(err error) {
-		go app.QueueUpdateDraw(func() { errorPopup(err) })
+		SendErr(err)
+		go app.QueueUpdateDraw(func() {
+			errorPopup(err)
+		})
 	})
-	t.renderPlayback(t.Playback.Snapshot())
 }
 
 func (t *Thunder) InitServer() {
@@ -57,10 +63,28 @@ func (t *Thunder) InitServer() {
 	t.Server = server
 }
 
+func (t *Thunder) InitLogger() {
+	logger, err := logger.New("/tmp/thunder.log")
+	if err != nil {
+		exit(err)
+	}
+	t.Logger = logger
+}
+
 func (t *Thunder) renderPlayback(s Snapshot) {
 	t.PlayPanel.Render(s)
 	t.PlayBar.Render(s)
 	t.Server.Write(s)
+}
+
+func (t *Thunder) SendErr(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case t.ErrCh <- err:
+	default:
+	}
 }
 
 func NewThunder() *Thunder {
@@ -73,6 +97,7 @@ func NewThunder() *Thunder {
 	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 	return &Thunder{
 		Colors: DefaultColors(),
+		ErrCh:  make(chan error, 64),
 	}
 }
 
@@ -151,4 +176,17 @@ func (t *Thunder) UnfocusAll() {
 func (t *Thunder) ResetFocus() {
 	t.UnfocusAll()
 	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
+}
+
+func (t *Thunder) Stop() {
+	t.stopOnce.Do(
+		func() {
+			thunder.Logger.Info("Stopping application")
+
+			thunder.Playback.Close()
+			thunder.Server.Close()
+			thunder.Logger.Close()
+			thunder.App.Stop()
+		},
+	)
 }

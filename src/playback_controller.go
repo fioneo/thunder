@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// PlaybackEngine implements Player(see player.go).
+// PlaybackEngine implements Player.
 type PlaybackEngine interface {
 	Play(song Song, onFinished func()) error
 	Stop()
@@ -30,7 +30,7 @@ type Snapshot struct {
 	Muted    bool
 }
 
-// Active returns true whether current song exist and it's not paused
+// Active returns true whether current song is playing and it's not paused
 func (s Snapshot) Active() bool { return s.Now != nil && !s.Paused }
 
 func (s Snapshot) VolumePercent() int {
@@ -59,6 +59,7 @@ func NewPlaybackController(engine PlaybackEngine) *PlaybackController {
 	}
 }
 
+// OnChange takes callback and calls it on every change of the controller state.
 func (c *PlaybackController) OnChange(fn func(Snapshot)) {
 	c.mu.Lock()
 	c.onChange = fn
@@ -145,10 +146,8 @@ func (c *PlaybackController) PlayFrom(songs []Song) {
 	})
 }
 
-/*
-PlayAt immediatelly start playing song with given index.
-Skipped songs are saved in History
-*/
+// PlayAt immediatelly starts playing song with given index.
+// Skipped songs are saved in history.
 func (c *PlaybackController) PlayAt(idx int) {
 	c.do(func() bool {
 		song, ok := c.queue.JumpTo(idx)
@@ -277,7 +276,7 @@ func (c *PlaybackController) Clear() {
 	})
 }
 
-// Close stops playing.After Close methods do nothing.
+// Close stops playing. After Close other methods do nothing.
 func (c *PlaybackController) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -289,11 +288,9 @@ func (c *PlaybackController) Close() {
 	c.engine.Stop()
 }
 
-/*
-next goes to the next playable song.
-If there is an error,it skips the song.
-Number of attemps is less or equal to length of the queue.
-*/
+// next goes to the next playable song.
+// If there is an error,it skips the song.
+// Number of attemps is less or equal to length of the queue.
 func (c *PlaybackController) next() {
 	for attempts := c.queue.Len() + 1; attempts > 0; attempts-- {
 		song, ok := c.queue.Next()
@@ -320,6 +317,8 @@ func (c *PlaybackController) start(song Song) bool {
 		c.errs = append(c.errs, err)
 		return false
 	}
+
+	thunder.Logger.Info(fmt.Sprintf("Start playing song: %s", song.Name()))
 	return true
 }
 

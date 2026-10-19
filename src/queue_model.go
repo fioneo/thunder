@@ -17,14 +17,16 @@ func NewQueue() *Queue {
 	return &Queue{}
 }
 
-// Now returns current song or nil
+// Now returns current song or nil.
 func (q *Queue) Now() Song { return q.now }
 
-// Upcoming returns copy of the upcoming songs
+// Upcoming returns copy of the upcoming songs.
 func (q *Queue) Upcoming() []Song { return slices.Clone(q.upcoming) }
 
+// Len returns length of the upcoming songs.
 func (q *Queue) Len() int { return len(q.upcoming) }
 
+// Mode returns current playing mode.
 func (q *Queue) Mode() PlayMode { return q.mode }
 
 func (q *Queue) SetMode(mode PlayMode) {
@@ -36,7 +38,7 @@ func (q *Queue) SetMode(mode PlayMode) {
 	}
 }
 
-// Enqueue adds songs to the end, skips already existed songs(including currently playing song).
+// Enqueue adds songs to the end of the queue, it skips already existing songs (including currently playing song).
 func (q *Queue) Enqueue(songs ...Song) (added, skipped int) {
 	seen := make(map[string]struct{}, len(q.upcoming)+1)
 	if q.now != nil {
@@ -68,9 +70,13 @@ func (q *Queue) PlayFrom(songs []Song) {
 }
 
 func (q *Queue) Next() (Song, bool) {
+	// If mode is set to repeat,return current song
+	if q.mode == RepeatMode {
+		return q.now, true
+	}
 	q.Finish()
 
-	if len(q.upcoming) == 0 && q.mode == RepeatMode {
+	if len(q.upcoming) == 0 {
 		q.upcoming, q.history = q.history, nil
 	}
 	if len(q.upcoming) == 0 {
@@ -100,7 +106,7 @@ func (q *Queue) Previous() (Song, bool) {
 	return prev, true
 }
 
-// Jumpto starts playing songs with given index; All previous songs are added to the history.
+// Jumpto starts playing songs with given index. All previous songs are added to the history.
 func (q *Queue) JumpTo(idx int) (Song, bool) {
 	if idx < 0 || idx >= len(q.upcoming) {
 		return nil, false
@@ -141,6 +147,7 @@ func (q *Queue) Remove(paths ...string) int {
 	return removed
 }
 
+// Move shifts element to the given index (idx + delta).
 func (q *Queue) Move(idx, delta int) int {
 	dst := idx + delta
 	if idx < 0 || idx >= len(q.upcoming) || dst < 0 || dst >= len(q.upcoming) {

@@ -92,7 +92,7 @@ func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth i
 	return printedWidth
 }
 
-func drawText(screen tcell.Screen, x, y, maxWidth int, text string, style tcell.Style) (printed int) {
+func PrintText(screen tcell.Screen, x, y, maxWidth int, text string, style tcell.Style) (printed int) {
 	for _, r := range text {
 		if printed >= maxWidth {
 			break

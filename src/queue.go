@@ -155,6 +155,8 @@ func (q *QueueView) handleKey(e *tcell.EventKey) *tcell.EventKey {
 				}
 			})
 		}
+	case 'h':
+		q.ctrl.Shuffle()
 	}
 	return e
 }

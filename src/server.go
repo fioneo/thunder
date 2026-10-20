@@ -16,6 +16,10 @@ type Response struct {
 	Position string `json:"position"`
 	// Length of the song. Formats as m:ss or h:mm:ss.
 	Length string `json:"length"`
+	// Volume set in thunder in percent format ( n% ).
+	Volume int `json:"volume"`
+	// Muted is true when song is muted.
+	Muted bool `json:"muted"`
 	// Playing is true whether the current song is playing and it's not paused.
 	Playing bool `json:"playing"`
 	// Paused is here to distinguish between nothing is playing and the current song is paused.
@@ -144,7 +148,6 @@ func (s *Server) Close() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			for conn := range s.clients {
-				close(s.clients[conn])
 				conn.Close()
 			}
 		},
@@ -160,6 +163,8 @@ func ResponseFromSnapshot(s Snapshot, pos, length time.Duration) Response {
 		Name:     name,
 		Position: fmtDuration(pos),
 		Length:   fmtDuration(length),
+		Volume:   s.VolumePercent(),
+		Muted:    s.Muted,
 		Playing:  s.Active(),
 		Paused:   s.Paused,
 	}

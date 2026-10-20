@@ -16,11 +16,11 @@ const (
 	sampleRate = beep.SampleRate(48000)
 
 	volumeStep = 0.5
-	minVolume  = -8.0
+	minVolume  = -10.0
 	maxVolume  = 0.0
 )
 
-type track struct {
+type audio struct {
 	streamer beep.StreamSeekCloser
 	format   beep.Format
 	ctrl     *beep.Ctrl
@@ -31,7 +31,7 @@ type track struct {
 type Player struct {
 	mu           sync.Mutex
 	speakerReady bool
-	track        *track
+	audio        *audio
 	volume       float64
 	muted        bool
 }
@@ -67,7 +67,7 @@ func (p *Player) Play(song Song, onFinished func()) error {
 	ctrl := &beep.Ctrl{Streamer: beep.Resample(4, format.SampleRate, sampleRate, streamer)}
 	vol := &effects.Volume{Streamer: ctrl, Base: 2, Volume: p.volume, Silent: p.muted}
 
-	p.track = &track{
+	p.audio = &audio{
 		streamer: streamer,
 		format:   format,
 		ctrl:     ctrl,
@@ -100,52 +100,55 @@ func (p *Player) Stop() {
 }
 
 func (p *Player) stop() {
-	if p.track == nil {
+	if p.audio == nil {
 		return
 	}
 	speaker.Clear()
-	p.track.streamer.Close()
-	p.track = nil
+	p.audio.streamer.Close()
+	p.audio = nil
 }
 
 func (p *Player) TogglePause() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.track == nil {
+	if p.audio == nil {
 		return
 	}
 
 	speaker.Lock()
 	defer speaker.Unlock()
-	p.track.ctrl.Paused = !p.track.ctrl.Paused
+	p.audio.ctrl.Paused = !p.audio.ctrl.Paused
 }
 
 func (p *Player) Seek(delta time.Duration) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.track == nil {
+	if p.audio == nil {
 		return nil
 	}
 
 	speaker.Lock()
 	defer speaker.Unlock()
 
-	t := p.track
+	t := p.audio
 	pos := t.streamer.Position() + t.format.SampleRate.N(delta)
 	last := max(t.streamer.Len()-1, 0)
-	return t.streamer.Seek(min(max(pos, 0), last))
+
+	err := t.streamer.Seek(min(max(pos, 0), last))
+
+	return err
 }
 
 func (p *Player) Position() (pos, length time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.track == nil {
+	if p.audio == nil {
 		return 0, 0
 	}
 
 	speaker.Lock()
 	defer speaker.Unlock()
-	return p.track.format.SampleRate.D(p.track.streamer.Position()), p.track.length
+	return p.audio.format.SampleRate.D(p.audio.streamer.Position()), p.audio.length
 }
 
 func (p *Player) ChangeVolume(delta float64) {
@@ -153,6 +156,11 @@ func (p *Player) ChangeVolume(delta float64) {
 	defer p.mu.Unlock()
 
 	p.volume = min(max(p.volume+delta, minVolume), maxVolume)
+	if p.volume == minVolume {
+		p.muted = true
+	} else {
+		p.muted = false
+	}
 	p.applyVolume()
 }
 
@@ -171,11 +179,11 @@ func (p *Player) Volume() (level float64, muted bool) {
 }
 
 func (p *Player) applyVolume() {
-	if p.track == nil {
+	if p.audio == nil {
 		return
 	}
 	speaker.Lock()
 	defer speaker.Unlock()
-	p.track.vol.Volume = p.volume
-	p.track.vol.Silent = p.muted
+	p.audio.vol.Volume = p.volume
+	p.audio.vol.Silent = p.muted
 }

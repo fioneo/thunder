@@ -31,11 +31,13 @@ func (q *Queue) Mode() PlayMode { return q.mode }
 
 func (q *Queue) SetMode(mode PlayMode) {
 	q.mode = mode
-	if mode == RandomMode {
-		rand.Shuffle(len(q.upcoming), func(i, j int) {
-			q.upcoming[i], q.upcoming[j] = q.upcoming[j], q.upcoming[i]
-		})
-	}
+}
+
+// TODO: Is it a good choise for shuffling?Maybe there is better algorithm
+func (q *Queue) Shuffle() {
+	rand.Shuffle(len(q.upcoming), func(i, j int) {
+		q.upcoming[i], q.upcoming[j] = q.upcoming[j], q.upcoming[i]
+	})
 }
 
 // Enqueue adds songs to the end of the queue, it skips already existing songs (including currently playing song).
@@ -72,7 +74,9 @@ func (q *Queue) PlayFrom(songs []Song) {
 func (q *Queue) Next() (Song, bool) {
 	// If mode is set to repeat,return current song
 	if q.mode == RepeatMode {
-		return q.now, true
+		if q.now != nil {
+			return q.now, true
+		}
 	}
 	q.Finish()
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"time"
 )
@@ -34,7 +33,7 @@ type Snapshot struct {
 func (s Snapshot) Active() bool { return s.Now != nil && !s.Paused }
 
 func (s Snapshot) VolumePercent() int {
-	return int(math.Round(math.Pow(2, s.Volume) * 100))
+	return int(s.Volume*10) + 100
 }
 
 type PlaybackController struct {
@@ -130,6 +129,13 @@ func (c *PlaybackController) Mode() PlayMode {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.queue.Mode()
+}
+
+func (c *PlaybackController) Shuffle() {
+	c.do(func() bool {
+		c.queue.Shuffle()
+		return true
+	})
 }
 
 // Progress return position and length of the current song.

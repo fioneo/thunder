@@ -92,7 +92,7 @@ func start(app *tview.Application) {
 	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		redrawAndWrite(ctx)
@@ -104,12 +104,17 @@ func start(app *tview.Application) {
 	}()
 
 	go func() {
-		defer wg.Done()
 		<-ctx.Done()
 		thunder.Stop()
 	}()
 
 	thunder.Logger.Info("Successfully initialized application")
+
+	defer func() {
+		if p := recover(); p != nil {
+			thunder.Logger.Errorf("panic: %s", p)
+		}
+	}()
 
 	// Main loop
 	err := thunder.App.Run()

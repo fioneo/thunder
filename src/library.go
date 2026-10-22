@@ -357,6 +357,11 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 	}
 	return e
 }
+
+func (l *Library) GetCurrentPath() string {
+	return l.currentPath
+}
+
 func (l *Library) GetStyle(file File) (*tcell.Style, *tcell.Style) {
 	style := l.songStyle()
 	selectedStyle := l.songSelectedStyle()

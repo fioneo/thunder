@@ -44,11 +44,20 @@ func (b *PlayBar) Draw(screen tcell.Screen) {
 		return
 	}
 
-	// borders
+	// padding
+	if height <= 5 {
+		y++
+		height -= 2
+	} else {
+		y += 2
+		height -= 4
+	}
 	x += 2
-	y += 1
 	width -= 4
-	height -= 2
+
+	if width <= 0 || height <= 0 {
+		return
+	}
 
 	colors := thunder.Colors
 	base := tcell.StyleDefault.Background(colors.Background)

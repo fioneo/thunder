@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"os"
 	"os/signal"
 	"strings"
 	"sync"
@@ -62,10 +64,13 @@ func start(app *tview.Application) {
 
 	thunder.renderPlayback(thunder.Playback.Snapshot())
 
+	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(thunder.PlayPanel, 0, 1, false).AddItem(thunder.PlayBar, 9, 0, false)
+	changed := false
+
 	flex := tview.NewFlex().
 		AddItem(thunder.Library, 0, 2, true).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(thunder.PlayPanel, 0, 7, false).AddItem(thunder.PlayBar, 0, 3, false), 0, 6, false)
+		AddItem(innerFlex, 0, 6, false)
 
 	thunder.Pages.AddPage("main", flex, true, true)
 	thunder.App.SetRoot(thunder.Pages, true).SetFocus(thunder.Library)
@@ -81,12 +86,29 @@ func start(app *tview.Application) {
 		switch e.Key() {
 		case tcell.KeyCtrlQ:
 			cancel()
+		case tcell.KeyCtrlT:
+			downloadPopup()
 		case tcell.KeyTab:
 			thunder.CyclePanels(true)
 		case tcell.KeyBacktab:
 			thunder.CyclePanels(false)
 		}
 		return thunder.handlePlaybackKey(e)
+	})
+
+	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		_, h := screen.Size()
+		size := 9
+		if h <= 25 {
+			size = 7
+			changed = true
+		} else if changed {
+			size = 9
+			changed = false
+		}
+		innerFlex.ResizeItem(thunder.PlayBar, size, 0)
+
+		return false
 	})
 
 	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
@@ -113,6 +135,7 @@ func start(app *tview.Application) {
 	defer func() {
 		if p := recover(); p != nil {
 			thunder.Logger.Errorf("panic: %s", p)
+			fmt.Fprintf(os.Stderr, "Unexpected panic.\nSee log file.\n")
 		}
 	}()
 

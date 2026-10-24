@@ -17,32 +17,26 @@ func fileToSong(file File) Song {
 	return NewSong(file.Name(), file.Path())
 }
 
-func filesToSongs(files []File) []Song {
+func filesToSongs(files []File) ([]Song, bool) {
 	songs := make([]Song, 0, len(files))
 	for _, f := range files {
 		if f.IsDir() {
-			continue
+			return []Song{}, false
 		}
 		song := fileToSong(f)
 
 		songs = append(songs, song)
 	}
-	return songs
+	return songs, true
 }
 
-func directoryToPlaylistInfo(name, path string, files []File) *playlistInfo {
-	songs := make([]Song, 0, len(files))
-
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-		song := fileToSong(f)
-
-		songs = append(songs, song)
+func directoryToPlaylistInfo(name, path string, files []File) (*playlistInfo, bool) {
+	songs, ok := filesToSongs(files)
+	if !ok {
+		return &playlistInfo{}, false
 	}
 
-	return NewPlaylistInfo(name, path, songs)
+	return NewPlaylistInfo(name, path, songs), true
 }
 
 func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth int, style tcell.Style, selectedStyle tcell.Style, selected bool, highlightStyle tcell.Style, highlighted bool) (printedWidth int) {

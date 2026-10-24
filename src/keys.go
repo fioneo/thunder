@@ -33,7 +33,7 @@ func (t *Thunder) handlePlaybackKey(e *tcell.EventKey) *tcell.EventKey {
 		c.ChangeVolume(-volumeStep)
 	case 'm':
 		c.ToggleMute()
-	case 'r':
+	case 'c':
 		c.CycleMode()
 	default:
 		return e

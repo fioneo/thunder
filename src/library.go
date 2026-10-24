@@ -179,10 +179,43 @@ func (l *Library) RemovePlaylist(idx int) error {
 	return nil
 }
 
+func (l *Library) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+
+// func (l *Library) RenameDir(oldPath, name string) error {
+// 	newPath := filepath.Join(filepath.Dir(oldPath), name)
+// 	return os.Rename(oldPath, newPath)
+// }
+
+func (l *Library) GetFileIdx(path string) int {
+	for i, f := range l.files {
+		if f.Path() == path {
+			return i
+		}
+	}
+	return -1
+}
+
+func (l *Library) SetCurrentIdx(idx int) {
+	if idx < 0 || idx >= len(l.files) {
+		return
+	}
+	l.currentIdx = idx
+	l.list.SetCurrentIdx(idx)
+}
+
 func (l *Library) Clear() {
 	l.currentIdx = 0
 	l.list.Clear()
 	l.files = nil
+}
+
+func (l *Library) Refresh() {
+	file := l.files[l.currentIdx]
+	l.readDir(l.currentPath)
+	l.SetCurrentIdx(l.GetFileIdx(file.Path()))
+
 }
 
 func (l *Library) UpdateInfo() {
@@ -215,7 +248,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 	switch e.Key() {
 	case tcell.KeyCtrlR:
-		l.readDir(l.currentPath)
+		l.Refresh()
 	case tcell.KeyEscape:
 		if len(l.list.GetSelectedItems()) != 0 {
 			l.list.ClearSelected()
@@ -233,7 +266,10 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 				files = append(files, item.(File))
 			}
 
-			songs := filesToSongs(files)
+			songs, ok := filesToSongs(files)
+			if !ok {
+				return e // Ignore directories
+			}
 			thunder.PlayPanel.playlist.InsertAll(songs)
 			l.list.ClearSelected()
 			l.UpdateInfo()
@@ -326,17 +362,57 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		})
 
 		l.UpdateInfo()
+	case 'r':
+		if len(l.files) == 0 ||
+			idx < 0 ||
+			idx >= len(l.files) {
+			return e
+		}
+		file := l.files[idx]
+
+		inputPopup("Rename file", file.Name(), file.Name(), func(ok bool, name string) {
+			if !ok {
+				return
+			}
+			if !file.IsDir() && !strings.HasSuffix(name, ".mp3") {
+				name += ".mp3"
+			}
+			newPath := filepath.Join(filepath.Dir(file.Path()), name)
+
+			if err := l.Rename(file.Path(), newPath); err != nil {
+				SendErr(err)
+				errorPopup(err)
+				return
+			}
+
+			l.Refresh()
+			idx := l.GetFileIdx(newPath)
+			l.SetCurrentIdx(idx)
+		})
 	case 'o':
 		if l.CheckIsModified() {
 			confirmationPopup("You have unsaved changes.\nAre you sure you want to close the current playlist?", func(_ int, label string) {
 				if label == "yes" {
-					playlistInfo := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
+					playlistInfo, ok := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
+					if !ok {
+						err := fmt.Errorf("directory containts other directories")
+						errorPopup(err)
+						SendErr(err)
+						return
+					}
 
 					thunder.PlayPanel.UpdateInfo(playlistInfo)
 				}
 			})
 		} else {
-			playlistInfo := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
+			playlistInfo, ok := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
+
+			if !ok {
+				err := fmt.Errorf("directory containts other directories")
+				errorPopup(err)
+				SendErr(err)
+				return e
+			}
 
 			thunder.PlayPanel.UpdateInfo(playlistInfo)
 		}

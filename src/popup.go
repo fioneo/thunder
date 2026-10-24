@@ -45,6 +45,8 @@ type defaultPopup struct {
 	primitive tview.Primitive
 	focusable bool
 	position  Position
+	width     int
+	height    int
 }
 
 type timedPopup struct {
@@ -54,24 +56,28 @@ type timedPopup struct {
 	once    sync.Once
 }
 
-func NewDefaultPopup(p tview.Primitive, id string, focusable bool, position Position) *defaultPopup {
+func NewDefaultPopup(p tview.Primitive, id string, focusable bool, position Position, width, height int) *defaultPopup {
 	popup := &defaultPopup{
 		primitive: p,
 		id:        id,
 		focusable: focusable,
 		position:  position,
+		width:     width,
+		height:    height,
 	}
 
 	return popup
 }
 
-func NewTimeoutPopup(p tview.Primitive, id string, focusable bool, position Position, timeout time.Duration) *timedPopup {
+func NewTimeoutPopup(p tview.Primitive, id string, focusable bool, position Position, timeout time.Duration, width, height int) *timedPopup {
 	return &timedPopup{
 		defaultPopup: &defaultPopup{
 			primitive: p,
 			id:        id,
 			focusable: focusable,
 			position:  position,
+			width:     width,
+			height:    height,
 		},
 		hide:    make(chan struct{}),
 		timeout: timeout,
@@ -96,6 +102,14 @@ func (p *defaultPopup) Primitive() tview.Primitive {
 
 func (p *defaultPopup) Focusable() bool {
 	return p.focusable
+}
+
+func (p *defaultPopup) Width() int {
+	return p.width
+}
+
+func (p *defaultPopup) Height() int {
+	return p.height
 }
 
 func (p *timedPopup) ID() string {
@@ -175,7 +189,7 @@ func (pm *PopupManager) Show(p Popup) {
 		pm.stack.Push(popup)
 
 		positionFunc := popup.position.ToFunc()
-		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, 0, 0), true, false)
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, p.Width(), p.Height()), true, false)
 
 		popup.Show()
 		if popup.focusable {
@@ -193,7 +207,7 @@ func (pm *PopupManager) Show(p Popup) {
 		popupCount.Add(1)
 
 		positionFunc := popup.position.ToFunc()
-		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, 0, 0), true, false)
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, p.Width(), p.Height()), true, false)
 
 		popup.Show()
 
@@ -269,7 +283,7 @@ func confirmationPopup(text string, handler func(int, string)) {
 		return e
 	})
 
-	popup := NewDefaultPopup(modal, id, true, Center)
+	popup := NewDefaultPopup(modal, id, true, Center, 0, 0)
 
 	modal.SetDoneFunc(func(indx int, label string) {
 		thunder.Popups.Hide(popup)
@@ -297,7 +311,7 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
 		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
-	popup := NewTimeoutPopup(textView, id, false, TopRight, timeout)
+	popup := NewTimeoutPopup(textView, id, false, TopRight, timeout, 0, 0)
 
 	thunder.Popups.Show(popup)
 }
@@ -610,7 +624,7 @@ func downloadPopup() {
 
 	id := fmt.Sprintf("download_popup-%d", popupCount.Load())
 
-	popup := NewDefaultPopup(frame, id, true, Center)
+	popup := NewDefaultPopup(frame, id, true, Center, 0, 0)
 
 	flex.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		switch e.Key() {
@@ -623,6 +637,32 @@ func downloadPopup() {
 	})
 
 	thunder.Popups.Show(popup)
+}
+
+func inputPopup(title, placeholder, text string, handler func(ok bool, text string)) {
+	colors := thunder.Colors
+	id := fmt.Sprintf("confirmation_popup-%d", popupCount.Load())
+	textStyle := tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(colors.Background)
+	placeholderStyle := tcell.StyleDefault.Foreground(tcell.ColorGrey).Background(colors.Background)
+
+	input := NewInput(placeholder, textStyle, placeholderStyle).SetText(text)
+
+	popup := NewDefaultPopup(input, id, true, Center, 0, 5)
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEscape:
+			handler(false, "")
+		case tcell.KeyEnter:
+			handler(true, input.GetText())
+		}
+		thunder.Popups.Hide(popup)
+	})
+
+	input.SetBorder(true).SetBorderColor(colors.Foreground).SetTitle(title).SetBorderPadding(1, 1, 1, 1)
+
+	thunder.Popups.Show(popup)
+
 }
 
 func NewInput(placeholder string, textStyle, placeholderStyle tcell.Style) *tview.InputField {

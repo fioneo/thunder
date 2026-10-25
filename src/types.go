@@ -3,11 +3,10 @@ package main
 type PlayMode int
 
 const (
-	DefaultMode PlayMode = iota
+	SequenceMode PlayMode = iota
 	RepeatMode
-	RandomMode
 
-	playModeCount // = 3
+	playModeCount // = 2
 )
 
 func (pm PlayMode) Next() PlayMode {
@@ -18,10 +17,8 @@ func (pm PlayMode) ToString() string {
 	var str string
 
 	switch pm {
-	case DefaultMode:
+	case SequenceMode:
 		str = "Seq"
-	case RandomMode:
-		str = "Rand"
 	case RepeatMode:
 		str = "Repeat"
 	}
@@ -54,36 +51,6 @@ func (s *song) Path() string {
 // func (s *song) Length() time.Duration {
 // 	return s.length
 // }
-
-type playlistInfo struct {
-	name  string
-	path  string
-	songs []Song
-}
-
-func NewPlaylistInfo(name string, path string, songs []Song) *playlistInfo {
-	return &playlistInfo{
-		name:  name,
-		path:  path,
-		songs: songs,
-	}
-}
-
-func NewDefaultPlaylistInfo(path string) *playlistInfo {
-	return NewPlaylistInfo("New Playlist", path, []Song{})
-}
-
-func (pi *playlistInfo) Name() string {
-	return pi.name
-}
-
-func (pi *playlistInfo) Path() string {
-	return pi.path
-}
-
-func (pi *playlistInfo) Songs() []Song {
-	return pi.songs
-}
 
 type file struct {
 	isDir bool

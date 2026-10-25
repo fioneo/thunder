@@ -65,7 +65,7 @@ func start(app *tview.Application) {
 	thunder.renderPlayback(thunder.Playback.Snapshot())
 
 	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(thunder.PlayPanel, 0, 1, false).AddItem(thunder.PlayBar, 9, 0, false)
+		AddItem(thunder.Queue, 0, 1, false).AddItem(thunder.PlayBar, 9, 0, false)
 	changed := false
 
 	flex := tview.NewFlex().
@@ -84,6 +84,8 @@ func start(app *tview.Application) {
 			return e
 		}
 		switch e.Key() {
+		case tcell.KeyCtrlC:
+			return tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone)
 		case tcell.KeyCtrlQ:
 			cancel()
 		case tcell.KeyCtrlT:

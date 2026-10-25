@@ -155,15 +155,17 @@ func (s *Server) read(conn net.Conn) {
 	for {
 		n, err := r.Read(buff)
 		if n > 0 {
-			cmd := strings.TrimSpace(string(buff[:n]))
+			cmd := strings.ToUpper(strings.TrimSpace(string(buff[:n])))
 			thunder.Logger.Infof("received from the client %s", cmd)
 			switch cmd {
 			case "TOGGLE_PAUSE":
 				s.ctrl.TogglePause()
 			case "NEXT":
 				s.ctrl.Next()
-			case "PREV":
+			case "PREVIOUS":
 				s.ctrl.Previous()
+			case "STOP":
+				s.ctrl.Stop()
 			case "TOGGLE_MUTE":
 				s.ctrl.ToggleMute()
 			case "VOL_UP":

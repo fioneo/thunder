@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -86,6 +89,7 @@ func (s *Server) loop() {
 		}
 		delay = 0
 		go s.serve(conn)
+		go s.read(conn)
 	}
 }
 
@@ -132,9 +136,52 @@ func (s *Server) serve(conn net.Conn) {
 		select {
 		case line := <-ch:
 			if _, err := conn.Write(line); err != nil {
-				thunder.Logger.Errorf("write to the client: %s", err)
+				if err != io.EOF {
+					thunder.Logger.Errorf("write to the client: %s", err)
+				}
+				return
 			}
 		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *Server) read(conn net.Conn) {
+	r := bufio.NewReader(conn)
+
+	buff := make([]byte, 64)
+
+	for {
+		n, err := r.Read(buff)
+		if n > 0 {
+			cmd := strings.TrimSpace(string(buff[:n]))
+			thunder.Logger.Infof("received from the client %s", cmd)
+			switch cmd {
+			case "TOGGLE_PAUSE":
+				s.ctrl.TogglePause()
+			case "NEXT":
+				s.ctrl.Next()
+			case "PREV":
+				s.ctrl.Previous()
+			case "TOGGLE_MUTE":
+				s.ctrl.ToggleMute()
+			case "VOL_UP":
+				s.ctrl.ChangeVolume(volumeStep)
+			case "VOL_DOWN":
+				s.ctrl.ChangeVolume(-volumeStep)
+			case "SEEK_BACKWARD":
+				s.ctrl.Seek(seekStep)
+			case "SEEK_FORWARD":
+				s.ctrl.Seek(-seekStep)
+			case "CYCLE_MODE":
+				s.ctrl.CycleMode()
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				thunder.Logger.Errorf("read from the client: %v", err)
+			}
 			return
 		}
 	}

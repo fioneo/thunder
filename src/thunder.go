@@ -11,10 +11,11 @@ import (
 var thunder *Thunder
 
 type Thunder struct {
-	App             *tview.Application
-	Pages           *tview.Pages
-	Library         *Library
-	PlayPanel       *PlayPanel
+	App     *tview.Application
+	Pages   *tview.Pages
+	Library *Library
+	// PlayPanel       *PlayPanel
+	Queue           *QueueView
 	PlayBar         *PlayBar
 	Playback        *PlaybackController
 	Panels          []Panel
@@ -39,9 +40,10 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	t.Playback = NewPlaybackController(NewPlayer())
 
 	t.Library = NewLibrary(home)
-	t.PlayPanel = NewPlayPanel(NewDefaultPlaylistInfo(home), t.Playback)
+	// t.PlayPanel = NewPlayPanel(NewDefaultPlaylistInfo(home), t.Playback)
+	t.Queue = NewQueueView(t.Playback)
 	t.PlayBar = NewPlayBar(t.Playback.Progress)
-	t.Panels = []Panel{t.Library, t.PlayPanel, t.PlayBar}
+	t.Panels = []Panel{t.Library, t.Queue, t.PlayBar}
 
 	t.Playback.OnChange(func(s Snapshot) {
 		go app.QueueUpdateDraw(func() { t.renderPlayback(s) })
@@ -72,7 +74,7 @@ func (t *Thunder) InitLogger() {
 }
 
 func (t *Thunder) renderPlayback(s Snapshot) {
-	t.PlayPanel.Render(s)
+	t.Queue.Render(s)
 	t.PlayBar.Render(s)
 	t.Server.Write(s)
 }

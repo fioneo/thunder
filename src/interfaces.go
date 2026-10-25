@@ -11,12 +11,6 @@ type Song interface {
 	// Length() time.Duration
 }
 
-type PlaylistInfo interface {
-	Name() string
-	Path() string
-	Songs() []Song
-}
-
 type Panel interface {
 	HasFocus() bool
 	SetBorderColor(tcell.Color) *tview.Box

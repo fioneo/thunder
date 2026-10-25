@@ -54,17 +54,20 @@ func NewQueueView(ctrl *PlaybackController) *QueueView {
 		ctrl:       ctrl,
 	}
 
-	list.SetChangedFunc(func(int, string) { q.notify() })
+	list.SetChangedFunc(func(int, string) { q.UpdateInfo() })
 	q.SetInputCapture(q.handleKey)
+
+	q.SetBorder(true).
+		SetBorderColor(thunder.Colors.Foreground).
+		SetTitleColor(thunder.Colors.Foreground).
+		SetBackgroundColor(thunder.Colors.Background)
+
 	return q
 }
 
-func (q *QueueView) SetUpdateFunc(fn func()) { q.onUpdate = fn }
-
-func (q *QueueView) notify() {
-	if q.onUpdate != nil {
-		q.onUpdate()
-	}
+func (q *QueueView) UpdateInfo() {
+	q.SetTitle(fmt.Sprintf("─ Queue ──┤ %d %s │ %s ├",
+		len(q.snap.Upcoming), songWord(len(q.snap.Upcoming)), q.snap.Mode.ToString()))
 }
 
 func (q *QueueView) Render(s Snapshot) {
@@ -85,7 +88,7 @@ func (q *QueueView) Render(s Snapshot) {
 	}
 
 	q.nowPlaying.SetText(nowPlayingText(s))
-	q.notify()
+	q.UpdateInfo()
 }
 
 func nowPlayingText(s Snapshot) string {
@@ -94,11 +97,6 @@ func nowPlayingText(s Snapshot) string {
 	}
 
 	return "  " + s.Now.Name()
-}
-
-func (q *QueueView) Title() string {
-	return fmt.Sprintf("─ Queue ──┤ %d %s │ %s ├",
-		len(q.snap.Upcoming), songWord(len(q.snap.Upcoming)), q.snap.Mode.ToString())
 }
 
 func (q *QueueView) refresh() {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,6 +16,7 @@ type Library struct {
 	pages       *tview.Pages
 	list        *List
 	files       []File
+	copied      []string
 	currentPath string
 	currentIdx  int
 	idxHistory  map[string]int
@@ -43,6 +45,7 @@ func NewLibrary(path string) *Library {
 
 	library.list.SetChangedFunc(func(idx int, _ string) {
 		library.currentIdx = idx
+		library.UpdateInfo()
 	})
 
 	library.SetInputCapture(library.handleKey)
@@ -105,22 +108,26 @@ func (l *Library) readDir(path string) error {
 
 func (l *Library) Remove(idx int) error {
 	file := l.files[idx]
-	if err := os.Remove(file.Path()); err != nil {
-		return err
+
+	var err error
+	if !file.IsDir() {
+		err = os.Remove(file.Path())
+	} else {
+		err = os.RemoveAll(file.Path())
 	}
 
 	l.list.RemoveItem(idx)
 	l.files = append(l.files[:idx], l.files[idx+1:]...)
 
 	if len(l.files) == 0 {
-		return nil
+		return err
 	}
 
 	if l.currentIdx > idx || l.currentIdx == len(l.files) {
 		l.currentIdx--
 	}
 
-	return nil
+	return err
 }
 
 // TODO: Make it more simple, log errors
@@ -155,38 +162,68 @@ func (l *Library) RemoveSelected() {
 	}
 }
 
-func (l *Library) RemovePlaylist(idx int) error {
-	file := l.files[idx]
-	if !file.IsDir() {
-		return fmt.Errorf("not a directory")
-	}
-
-	if err := os.RemoveAll(file.Path()); err != nil {
-		return err
-	}
-
-	l.list.RemoveItem(idx)
-	l.files = append(l.files[:idx], l.files[idx+1:]...)
-
-	if len(l.files) == 0 {
-		return nil
-	}
-
-	if l.currentIdx > idx || l.currentIdx == len(l.files) {
-		l.currentIdx--
-	}
-
-	return nil
-}
-
 func (l *Library) Rename(oldPath, newPath string) error {
 	return os.Rename(oldPath, newPath)
 }
 
-// func (l *Library) RenameDir(oldPath, name string) error {
-// 	newPath := filepath.Join(filepath.Dir(oldPath), name)
-// 	return os.Rename(oldPath, newPath)
-// }
+func (l *Library) Copy() int {
+	idx := l.currentIdx
+	if len(l.files) == 0 ||
+		idx < 0 ||
+		idx >= len(l.files) {
+		return 0
+	}
+
+	paths := l.selectedPaths()
+
+	copied := 0
+
+	if len(paths) != 0 {
+		l.copied = append(l.copied, paths...)
+		copied += len(paths)
+	} else {
+		l.copied = append(l.copied, l.files[idx].Path())
+		copied += 1
+	}
+
+	return copied
+}
+
+func (l *Library) Paste() int {
+	if len(l.copied) == 0 {
+		return 0
+	}
+
+	paths := l.copied
+
+	pasted := 0
+	for _, path := range paths {
+		from, err := os.Open(path)
+		if err != nil {
+			SendErr(err)
+			continue
+		}
+
+		toPath := filepath.Join(l.currentPath, filepath.Base(from.Name()))
+		to, err := os.OpenFile(toPath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			SendErr(err)
+			continue
+		}
+
+		if _, err := io.Copy(to, from); err != nil {
+			err := fmt.Errorf("copy from %s to %s: %v", path, toPath, err)
+			errorPopup(err)
+			SendErr(err)
+			continue
+		}
+		from.Close()
+		to.Close()
+		pasted++
+	}
+
+	return pasted
+}
 
 func (l *Library) GetFileIdx(path string) int {
 	for i, f := range l.files {
@@ -205,6 +242,15 @@ func (l *Library) SetCurrentIdx(idx int) {
 	l.list.SetCurrentIdx(idx)
 }
 
+func (l *Library) selectedPaths() []string {
+	selected := l.list.GetSelectedItems()
+	paths := make([]string, len(selected))
+	for i, item := range selected {
+		paths[i] = item.Path()
+	}
+	return paths
+}
+
 func (l *Library) Clear() {
 	l.currentIdx = 0
 	l.list.Clear()
@@ -212,6 +258,9 @@ func (l *Library) Clear() {
 }
 
 func (l *Library) Refresh() {
+	if l.currentIdx < 0 || l.currentIdx >= len(l.files) {
+		return
+	}
 	file := l.files[l.currentIdx]
 	l.readDir(l.currentPath)
 	l.SetCurrentIdx(l.GetFileIdx(file.Path()))
@@ -233,8 +282,6 @@ func (l *Library) UpdateInfo() {
 	l.CheckIsEmpty()
 }
 
-func (l *Library) CheckIsModified() bool { return thunder.PlayPanel.playlist.GetModified() }
-
 func (l *Library) CheckIsEmpty() {
 	if len(l.files) == 0 {
 		l.pages.SwitchToPage("empty_directory")
@@ -254,6 +301,40 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			l.list.ClearSelected()
 			l.UpdateInfo()
 		}
+	case tcell.KeyCtrlC:
+		copied := l.Copy()
+
+		word := "file"
+
+		if copied > 1 {
+			word = "files"
+		}
+
+		if copied > 0 {
+			infoPopup(fmt.Sprintf(
+				"Copied %d %s",
+				copied,
+				word,
+			))
+		}
+		l.UpdateInfo()
+	case tcell.KeyCtrlV:
+		pasted := l.Paste()
+
+		word := "file"
+
+		if pasted > 1 {
+			word = "files"
+		}
+
+		if pasted > 0 {
+			infoPopup(fmt.Sprintf(
+				"Pasted %d %s",
+				pasted,
+				word,
+			))
+		}
+		l.UpdateInfo()
 	}
 	switch e.Rune() {
 	case 'l':
@@ -266,11 +347,8 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 				files = append(files, item.(File))
 			}
 
-			songs, ok := filesToSongs(files)
-			if !ok {
-				return e // Ignore directories
-			}
-			thunder.PlayPanel.playlist.InsertAll(songs)
+			songs := filesToSongs(files)
+			thunder.Playback.Enqueue(songs...)
 			l.list.ClearSelected()
 			l.UpdateInfo()
 			return e
@@ -286,7 +364,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 		if !file.IsDir() {
 			song := fileToSong(file)
-			thunder.PlayPanel.playlist.Insert(song)
+			thunder.Playback.Enqueue(song)
 			return e
 		}
 
@@ -337,20 +415,13 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 		file := l.files[idx]
 
+		name := "file"
+
 		if file.IsDir() {
-			text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current folder?\nThis will delete all files in it.", file.Name())
-			confirmationPopup(text, func(_ int, label string) {
-				if label == "yes" {
-					if err := l.RemovePlaylist(idx); err != nil {
-						SendErr(err)
-						errorPopup(err)
-					}
-				}
-			})
-			return e
+			name = "directory"
 		}
 
-		text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current file?", file.Name())
+		text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current %s?", name, file.Name())
 
 		confirmationPopup(text, func(_ int, label string) {
 			if label == "yes" {
@@ -389,47 +460,6 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			idx := l.GetFileIdx(newPath)
 			l.SetCurrentIdx(idx)
 		})
-	case 'o':
-		if l.CheckIsModified() {
-			confirmationPopup("You have unsaved changes.\nAre you sure you want to close the current playlist?", func(_ int, label string) {
-				if label == "yes" {
-					playlistInfo, ok := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
-					if !ok {
-						err := fmt.Errorf("directory containts other directories")
-						errorPopup(err)
-						SendErr(err)
-						return
-					}
-
-					thunder.PlayPanel.UpdateInfo(playlistInfo)
-				}
-			})
-		} else {
-			playlistInfo, ok := directoryToPlaylistInfo(filepath.Base(l.currentPath), l.currentPath, l.files)
-
-			if !ok {
-				err := fmt.Errorf("directory containts other directories")
-				errorPopup(err)
-				SendErr(err)
-				return e
-			}
-
-			thunder.PlayPanel.UpdateInfo(playlistInfo)
-		}
-	case 'n':
-		if l.CheckIsModified() {
-			confirmationPopup("You have unsaved changes.\nAre you sure you want to create a new playlist?", func(_ int, label string) {
-				if label == "yes" {
-					playlistInfo := NewDefaultPlaylistInfo(l.currentPath)
-
-					thunder.PlayPanel.UpdateInfo(playlistInfo)
-				}
-			})
-		} else {
-			playlistInfo := NewDefaultPlaylistInfo(l.currentPath)
-
-			thunder.PlayPanel.UpdateInfo(playlistInfo)
-		}
 	}
 	return e
 }
@@ -443,8 +473,8 @@ func (l *Library) GetStyle(file File) (*tcell.Style, *tcell.Style) {
 	selectedStyle := l.songSelectedStyle()
 
 	if file.IsDir() {
-		style = l.playlistStyle()
-		selectedStyle = l.playlistSelectedStyle()
+		style = l.dirStyle()
+		selectedStyle = l.dirSelectedStyle()
 	}
 
 	return &style, &selectedStyle
@@ -458,10 +488,10 @@ func (l *Library) songSelectedStyle() tcell.Style {
 	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)
 }
 
-func (l *Library) playlistStyle() tcell.Style {
+func (l *Library) dirStyle() tcell.Style {
 	return tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)
 }
 
-func (l *Library) playlistSelectedStyle() tcell.Style {
+func (l *Library) dirSelectedStyle() tcell.Style {
 	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist)
 }

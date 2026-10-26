@@ -16,7 +16,7 @@ type Library struct {
 	pages       *tview.Pages
 	list        *List
 	files       []File
-	copied      []string
+	copied      []File
 	currentPath string
 	currentIdx  int
 	idxHistory  map[string]int
@@ -174,55 +174,130 @@ func (l *Library) Copy() int {
 		return 0
 	}
 
-	paths := l.selectedPaths()
+	c := make(map[string]struct{}, len(l.copied))
+
+	for _, file := range l.copied {
+		c[file.Path()] = struct{}{}
+	}
+
+	files := l.selectedFiles()
 
 	copied := 0
 
-	if len(paths) != 0 {
-		l.copied = append(l.copied, paths...)
-		copied += len(paths)
+	if len(files) != 0 {
+		for _, file := range files {
+			if _, ok := c[file.Path()]; ok {
+				infoPopup(file.Path(), "file is already copied")
+				thunder.Logger.Info(fmt.Sprintf("%s: file is already copied", file.Path()))
+				continue
+			}
+			l.copied = append(l.copied, file)
+			copied++
+		}
 	} else {
-		l.copied = append(l.copied, l.files[idx].Path())
-		copied += 1
+		file := l.files[idx]
+
+		if _, ok := c[file.Path()]; ok {
+			infoPopup(file.Path(), "file is already copied")
+			thunder.Logger.Info(fmt.Sprintf("%s: file is already copied", file.Path()))
+		} else {
+			l.copied = append(l.copied, file)
+			copied++
+		}
 	}
 
 	return copied
 }
 
 func (l *Library) Paste() int {
-	if len(l.copied) == 0 {
-		return 0
-	}
-
-	paths := l.copied
+	files := l.copied
+	path := l.currentPath
 
 	pasted := 0
-	for _, path := range paths {
-		from, err := os.Open(path)
-		if err != nil {
-			SendErr(err)
-			continue
-		}
 
-		toPath := filepath.Join(l.currentPath, filepath.Base(from.Name()))
-		to, err := os.OpenFile(toPath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			SendErr(err)
-			continue
+	for _, file := range files {
+		switch file.IsDir() {
+		case true:
+			if ok := l.PasteDir(file, path); ok {
+				pasted++
+			}
+		case false:
+			if ok := l.PasteFile(file, path); ok {
+				pasted++
+			}
 		}
-
-		if _, err := io.Copy(to, from); err != nil {
-			err := fmt.Errorf("copy from %s to %s: %v", path, toPath, err)
-			errorPopup(err)
-			SendErr(err)
-			continue
-		}
-		from.Close()
-		to.Close()
-		pasted++
 	}
 
 	return pasted
+}
+
+func (l *Library) PasteFile(file File, path string) bool {
+	from, err := os.Open(file.Path())
+	if err != nil {
+		SendErr(err)
+		errorPopup(err)
+		return false
+	}
+	defer from.Close()
+
+	toPath := filepath.Join(path, filepath.Base(from.Name()))
+	to, err := os.OpenFile(toPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		SendErr(err)
+		errorPopup(err)
+		return false
+	}
+	defer to.Close()
+
+	if _, err := io.Copy(to, from); err != nil {
+		errorPopup(fmt.Errorf("Copy error\nSee log file for details."))
+		SendErr(fmt.Errorf("copy from %s to %s: %v", file.Path(), toPath, err))
+		return false
+	}
+
+	return true
+}
+
+func (l *Library) PasteDir(fromDir File, path string) bool {
+	dirEntries, err := os.ReadDir(fromDir.Path())
+	if err != nil {
+		SendErr(err)
+		errorPopup(err)
+		return false
+	}
+
+	toDir := filepath.Join(
+		path,
+		filepath.Base(fromDir.Path()),
+	)
+
+	_ = os.RemoveAll(toDir)
+
+	err = os.Mkdir(
+		toDir,
+		0755,
+	)
+
+	if err != nil {
+		SendErr(err)
+		errorPopup(err)
+		return false
+	}
+
+	for _, entry := range dirEntries {
+		path := filepath.Join(fromDir.Path(), entry.Name())
+		name := entry.Name()
+
+		file := NewFile(name, path, entry.IsDir())
+
+		if entry.IsDir() {
+			l.PasteDir(file, toDir)
+		} else {
+			l.PasteFile(file, toDir)
+		}
+	}
+
+	return true
 }
 
 func (l *Library) GetFileIdx(path string) int {
@@ -242,13 +317,13 @@ func (l *Library) SetCurrentIdx(idx int) {
 	l.list.SetCurrentIdx(idx)
 }
 
-func (l *Library) selectedPaths() []string {
+func (l *Library) selectedFiles() []File {
 	selected := l.list.GetSelectedItems()
-	paths := make([]string, len(selected))
+	files := make([]File, len(selected))
 	for i, item := range selected {
-		paths[i] = item.Path()
+		files[i] = item.(File)
 	}
-	return paths
+	return files
 }
 
 func (l *Library) Clear() {
@@ -259,12 +334,12 @@ func (l *Library) Clear() {
 
 func (l *Library) Refresh() {
 	if l.currentIdx < 0 || l.currentIdx >= len(l.files) {
-		return
+		l.readDir(l.currentPath)
+	} else {
+		file := l.files[l.currentIdx]
+		l.readDir(l.currentPath)
+		l.SetCurrentIdx(l.GetFileIdx(file.Path()))
 	}
-	file := l.files[l.currentIdx]
-	l.readDir(l.currentPath)
-	l.SetCurrentIdx(l.GetFileIdx(file.Path()))
-
 }
 
 func (l *Library) UpdateInfo() {
@@ -311,7 +386,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		}
 
 		if copied > 0 {
-			infoPopup(fmt.Sprintf(
+			infoPopup("", fmt.Sprintf(
 				"Copied %d %s",
 				copied,
 				word,
@@ -328,12 +403,15 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		}
 
 		if pasted > 0 {
-			infoPopup(fmt.Sprintf(
+			infoPopup("", fmt.Sprintf(
 				"Pasted %d %s",
 				pasted,
 				word,
 			))
+			l.Refresh()
+			l.copied = nil
 		}
+
 		l.UpdateInfo()
 	}
 	switch e.Rune() {
@@ -387,11 +465,10 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		}
 
 		if idx, ok := l.idxHistory[path]; ok {
-			if idx < 0 || idx >= len(l.files) {
-				return e
-			}
-			l.currentIdx = idx
-			l.list.SetCurrentIdx(idx)
+			// if idx < 0 || idx >= len(l.files) {
+			// 	return e
+			// }
+			l.SetCurrentIdx(idx)
 		}
 	case 'd':
 		selectedItems := l.list.GetSelectedItems()
@@ -421,7 +498,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			name = "directory"
 		}
 
-		text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current %s?", name, file.Name())
+		text := fmt.Sprintf("[ %s ]\nAre you sure you want to delete the current %s?", file.Name(), name)
 
 		confirmationPopup(text, func(_ int, label string) {
 			if label == "yes" {
@@ -431,7 +508,6 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 				}
 			}
 		})
-
 		l.UpdateInfo()
 	case 'r':
 		if len(l.files) == 0 ||

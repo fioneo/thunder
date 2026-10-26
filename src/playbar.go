@@ -65,17 +65,17 @@ func (b *PlayBar) Draw(screen tcell.Screen) {
 
 	// Now playing
 	if s.Now == nil {
-		text := fmt.Sprintf("Nothing playing")
+		text := "Nothing playing"
 		x := x + (width-len(text))/2
 		PrintText(screen, x, y, width, text, base.Foreground(colors.Foreground))
 	} else {
 		text := s.Now.Name()
-		x := x + (width-len(text))/2
-
+		x := x + (width-len([]rune(text)))/2
 		PrintText(screen, x, y, width, text, base.Foreground(colors.Highlighted))
 	}
 	y++
 
+	// Progress
 	if height >= 2 {
 		pos, length := b.progress()
 		b.drawProgress(screen, x, y, width, pos, length, base)
@@ -84,7 +84,7 @@ func (b *PlayBar) Draw(screen tcell.Screen) {
 
 	// Mode and volume
 	if height >= 3 {
-		volume := fmt.Sprintf("%d%%", s.VolumePercent())
+		volume := fmt.Sprintf("%d%%", volumeToPercentage(s.Volume))
 		if s.Muted {
 			volume = "muted"
 		}

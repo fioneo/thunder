@@ -182,14 +182,13 @@ func NewPopupManager() *PopupManager {
 }
 
 func (pm *PopupManager) Show(p Popup) {
-
 	switch popup := p.(type) {
 	case *defaultPopup:
 		popupCount.Add(1)
 		pm.stack.Push(popup)
 
 		positionFunc := popup.position.ToFunc()
-		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, p.Width(), p.Height()), true, false)
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, popup.width, popup.height), true, false)
 
 		popup.Show()
 		if popup.focusable {
@@ -207,7 +206,7 @@ func (pm *PopupManager) Show(p Popup) {
 		popupCount.Add(1)
 
 		positionFunc := popup.position.ToFunc()
-		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, p.Width(), p.Height()), true, false)
+		thunder.Pages.AddPage(popup.id, positionFunc(popup.primitive, popup.width, popup.height), true, false)
 
 		popup.Show()
 
@@ -294,11 +293,12 @@ func confirmationPopup(text string, handler func(int, string)) {
 }
 
 func errorPopup(err error) {
-	timeoutPopup(err.Error(), 2*time.Second, tcell.ColorRed, tcell.ColorRed)
+	timeoutPopup(err.Error(), 3*time.Second, tcell.ColorRed, tcell.ColorRed)
 }
 
-func infoPopup(text string) {
-	timeoutPopup(text, 2*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground)
+func infoPopup(title, desc string) {
+	text := fmt.Sprintf("%s\n%s", title, desc)
+	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground)
 }
 
 func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color) {
@@ -311,7 +311,7 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
 		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
-	popup := NewTimeoutPopup(textView, id, false, TopRight, timeout, 0, 0)
+	popup := NewTimeoutPopup(textView, id, false, TopRight, timeout, 0, 7)
 
 	thunder.Popups.Show(popup)
 }
@@ -323,7 +323,7 @@ func topRight(p tview.Primitive, width, height int) tview.Primitive {
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
 			AddItem(p, height, 2, false).
-			AddItem(nil, 0, 8, false), width, 15, false).
+			AddItem(nil, 0, 12, false), width, 15, false).
 		AddItem(nil, 0, 1, false)
 }
 
@@ -566,6 +566,7 @@ func downloadPopup() {
 
 		thunder.App.QueueUpdateDraw(func() {
 			frame.SetTitle("Download completed")
+			thunder.Library.Refresh()
 		})
 
 	}

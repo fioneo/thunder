@@ -28,7 +28,7 @@ type Thunder struct {
 	stopOnce        sync.Once
 }
 
-func (t *Thunder) InitPanels(app *tview.Application) {
+func (t *Thunder) InitPanels(app *tview.Application, args Args) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		exit(err)
@@ -37,10 +37,10 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	t.App = app
 	t.Pages = tview.NewPages()
 	t.Popups = NewPopupManager()
-	t.Playback = NewPlaybackController(NewPlayer())
+	vol := percentageToVolume(args.volume)
+	t.Playback = NewPlaybackController(NewPlayer(vol))
 
 	t.Library = NewLibrary(home)
-	// t.PlayPanel = NewPlayPanel(NewDefaultPlaylistInfo(home), t.Playback)
 	t.Queue = NewQueueView(t.Playback)
 	t.PlayBar = NewPlayBar(t.Playback.Progress)
 	t.Panels = []Panel{t.Library, t.Queue, t.PlayBar}
@@ -56,8 +56,8 @@ func (t *Thunder) InitPanels(app *tview.Application) {
 	})
 }
 
-func (t *Thunder) InitServer() {
-	server, err := NewServer("/tmp/thunder.sock", t.Playback)
+func (t *Thunder) InitServer(args Args) {
+	server, err := NewServer(args.sockPath, t.Playback)
 	if err != nil {
 		exit(err)
 	}
@@ -65,8 +65,8 @@ func (t *Thunder) InitServer() {
 	t.Server = server
 }
 
-func (t *Thunder) InitLogger() {
-	logger, err := logger.New("/tmp/thunder.log")
+func (t *Thunder) InitLogger(args Args) {
+	logger, err := logger.New(args.logPath)
 	if err != nil {
 		exit(err)
 	}

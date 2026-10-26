@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -55,12 +57,88 @@ func logErrors(ctx context.Context) {
 	}
 }
 
+const usage = `thunder - terminal music player
+
+Usage:
+  thunder [options] [song]
+
+Options:
+  -h, --help          Print this help and exit.
+  -s, --sock path     Control socket path (default: thunder.sock in the temp dir).
+  -l, --log path      Log file path (default: thunder.log in the temp dir).
+  -v, --volume level  Initial volume (default: 100).
+
+Examples:
+  thunder
+  thunder ~/music/song.mp3
+  thunder -v 50 -s /tmp/thunder.sock ~/Music/song.mp3
+`
+
+type Args struct {
+	sockPath string
+	logPath  string
+	volume   int
+	song     string
+}
+
+func args() Args {
+	flag.Usage = func() {
+		fmt.Printf("%s\n", usage)
+	}
+
+	tmp := os.TempDir()
+
+	sockPath := filepath.Join(tmp, "thunder.sock")
+	logPath := filepath.Join(tmp, "thunder.log")
+	song := ""
+	volume := 100
+
+	var help bool
+
+	// long
+	flag.BoolVar(&help, "help", false, "")
+	flag.StringVar(&sockPath, "sock", sockPath, "")
+	flag.StringVar(&logPath, "log", logPath, "")
+	flag.IntVar(&volume, "volume", 100, "")
+
+	// short
+	flag.BoolVar(&help, "h", false, "")
+	flag.StringVar(&sockPath, "s", sockPath, "")
+	flag.StringVar(&logPath, "l", logPath, "")
+	flag.IntVar(&volume, "v", 100, "")
+
+	flag.Parse()
+
+	if help {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	if volume < 0 || volume > 100 {
+		fmt.Fprintf(os.Stderr, "invalid volume: %d: must be between 0 and 100.\n\n", volume)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if args := flag.Args(); len(args) > 0 {
+		song = args[0]
+	}
+
+	return Args{
+		sockPath: sockPath,
+		logPath:  logPath,
+		volume:   volume,
+		song:     song,
+	}
+}
+
 func start(app *tview.Application) {
 	thunder = NewThunder()
-	thunder.InitLogger()
+	args := args()
+	thunder.InitLogger(args)
 
-	thunder.InitPanels(app)
-	thunder.InitServer()
+	thunder.InitPanels(app, args)
+	thunder.InitServer(args)
 
 	thunder.renderPlayback(thunder.Playback.Snapshot())
 
@@ -133,6 +211,13 @@ func start(app *tview.Application) {
 	}()
 
 	thunder.Logger.Info("Successfully initialized application")
+
+	if args.song != "" {
+		name := filepath.Base(args.song)
+		song := NewSong(name, args.song)
+		thunder.Playback.Enqueue(song)
+		thunder.Playback.Next()
+	}
 
 	defer func() {
 		if p := recover(); p != nil {

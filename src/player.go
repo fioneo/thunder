@@ -38,8 +38,10 @@ type Player struct {
 
 var _ PlaybackEngine = (*Player)(nil)
 
-func NewPlayer() *Player {
-	return &Player{}
+func NewPlayer(volume float64) *Player {
+	return &Player{
+		volume: volume,
+	}
 }
 
 func (p *Player) Play(song Song, onFinished func()) error {

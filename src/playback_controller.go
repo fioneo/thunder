@@ -32,10 +32,6 @@ type Snapshot struct {
 // Active returns true whether current song is playing and it's not paused
 func (s Snapshot) Active() bool { return s.Now != nil && !s.Paused }
 
-func (s Snapshot) VolumePercent() int {
-	return int(s.Volume*10) + 100
-}
-
 type PlaybackController struct {
 	mu     sync.Mutex
 	engine PlaybackEngine

@@ -212,7 +212,7 @@ func ResponseFromSnapshot(s Snapshot, pos, length time.Duration) Response {
 		Name:     name,
 		Position: fmtDuration(pos),
 		Length:   fmtDuration(length),
-		Volume:   s.VolumePercent(),
+		Volume:   volumeToPercentage(s.Volume),
 		Muted:    s.Muted,
 		Playing:  s.Active(),
 		Paused:   s.Paused,

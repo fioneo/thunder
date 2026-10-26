@@ -101,6 +101,14 @@ func fmtDuration(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", m, s)
 }
 
+func percentageToVolume(percentage int) float64 {
+	return float64(percentage-100) / 10
+}
+
+func volumeToPercentage(volume float64) int {
+	return int(volume*10) + 100
+}
+
 func songWord(n int) string {
 	if n == 1 {
 		return "song"

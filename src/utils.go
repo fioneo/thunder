@@ -125,3 +125,7 @@ func SendErr(err error) {
 	default:
 	}
 }
+
+func onUI(f func()) {
+	thunder.App.QueueUpdateDraw(f)
+}

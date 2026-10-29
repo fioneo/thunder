@@ -105,9 +105,15 @@ func (b *PlayBar) drawProgress(screen tcell.Screen, x, y, width int, pos, length
 	left, right := fmtDuration(pos), fmtDuration(length)
 
 	barWidth := width - len(left) - len(right) - 2
+	barColor := base.Foreground(colors.Foreground)
+
 	if barWidth < 4 {
 		PrintText(screen, x, y, width, left+" / "+right, base.Foreground(colors.Foreground))
 		return
+	}
+
+	if b.snap.Now != nil {
+		barColor = base.Foreground(colors.Song)
 	}
 
 	filled := 0
@@ -118,7 +124,7 @@ func (b *PlayBar) drawProgress(screen tcell.Screen, x, y, width int, pos, length
 
 	PrintText(screen, x, y, width, left, base.Foreground(colors.Foreground))
 	bx := x + len(left) + 1
-	PrintText(screen, bx, y, filled, strings.Repeat("━", filled)+"│", base.Foreground(colors.Highlighted))
-	PrintText(screen, bx+filled, y, barWidth-filled, strings.Repeat("─", barWidth-filled), base.Foreground(colors.Song))
+	PrintText(screen, bx, y, filled, strings.Repeat("━", filled), base.Foreground(colors.Highlighted))
+	PrintText(screen, bx+filled, y, barWidth-filled, strings.Repeat("─", barWidth-filled), barColor)
 	PrintText(screen, bx+barWidth+1, y, len(right), right, base.Foreground(colors.Foreground))
 }

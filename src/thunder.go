@@ -4,17 +4,16 @@ import (
 	"github.com/fioneo/thunder/src/logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"os"
 	"sync"
+	"time"
 )
 
 var thunder *Thunder
 
 type Thunder struct {
-	App     *tview.Application
-	Pages   *tview.Pages
-	Library *Library
-	// PlayPanel       *PlayPanel
+	App             *tview.Application
+	Pages           *tview.Pages
+	Library         *Library
 	Queue           *QueueView
 	PlayBar         *PlayBar
 	Playback        *PlaybackController
@@ -29,18 +28,13 @@ type Thunder struct {
 }
 
 func (t *Thunder) InitPanels(app *tview.Application, args Args) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		exit(err)
-	}
-
 	t.App = app
 	t.Pages = tview.NewPages()
 	t.Popups = NewPopupManager()
 	vol := percentageToVolume(args.volume)
 	t.Playback = NewPlaybackController(NewPlayer(vol))
 
-	t.Library = NewLibrary(home)
+	t.Library = NewLibrary(args.musicPath)
 	t.Queue = NewQueueView(t.Playback)
 	t.PlayBar = NewPlayBar(t.Playback.Progress)
 	t.Panels = []Panel{t.Library, t.Queue, t.PlayBar}
@@ -151,20 +145,61 @@ func (t *Thunder) CyclePanels(forward bool) {
 	t.SetFocusPanel(prevPanel, currentPanel)
 }
 
-func (t *Thunder) SetFocusPanel(prevPanel, currentPanel Panel) {
+const seekStep = 5 * time.Second
 
-	if prevPanel != nil {
-		prevPanel.SetBorderColor(t.Colors.Foreground)
-		prevPanel.SetTitleColor(t.Colors.Foreground)
+func (t *Thunder) handlePlaybackKey(e *tcell.EventKey) *tcell.EventKey {
+	if e.Key() != tcell.KeyRune {
+		return e
 	}
 
-	if currentPanel != nil {
-		primitive := currentPanel.(tview.Primitive)
+	c := t.Playback
+	switch e.Rune() {
+	case 'p':
+		c.TogglePause()
+	case '>':
+		c.Next()
+	case '<':
+		c.Previous()
+	case 'x':
+		c.Stop()
+	case ']':
+		c.Seek(seekStep)
+	case '[':
+		c.Seek(-seekStep)
+	case '+', '=':
+		c.ChangeVolume(volumeStep)
+	case '-':
+		c.ChangeVolume(-volumeStep)
+	case 'm':
+		c.ToggleMute()
+	case 'y':
+		c.CycleMode()
+	default:
+		return e
+	}
+	return nil
+}
+
+func (t *Thunder) SetFocusPanel(prevPanel, currentPanel Panel) {
+	t.Unfocus(prevPanel)
+	t.Focus(currentPanel)
+}
+
+func (t *Thunder) Unfocus(panel Panel) {
+	if panel != nil {
+		panel.SetBorderColor(t.Colors.Foreground)
+		panel.SetTitleColor(t.Colors.Foreground)
+	}
+}
+
+func (t *Thunder) Focus(panel Panel) {
+	if panel != nil {
+		primitive := panel.(tview.Primitive)
 
 		t.App.SetFocus(primitive)
 
-		currentPanel.SetBorderColor(t.Colors.Accent)
-		currentPanel.SetTitleColor(t.Colors.Accent)
+		panel.SetBorderColor(t.Colors.Accent)
+		panel.SetTitleColor(t.Colors.Accent)
 	}
 }
 
@@ -177,18 +212,18 @@ func (t *Thunder) UnfocusAll() {
 
 func (t *Thunder) ResetFocus() {
 	t.UnfocusAll()
-	thunder.SetFocusPanel(nil, thunder.Panels[thunder.CurrentPanelIdx])
+	t.Focus(t.Panels[t.CurrentPanelIdx])
 }
 
 func (t *Thunder) Stop() {
 	t.stopOnce.Do(
 		func() {
-			thunder.Logger.Info("Stopping application")
+			t.Logger.Info("Stopping application")
 
-			thunder.Playback.Close()
-			thunder.Server.Close()
-			thunder.Logger.Close()
-			thunder.App.Stop()
+			t.Playback.Close()
+			t.Server.Close()
+			t.Logger.Close()
+			t.App.Stop()
 		},
 	)
 }

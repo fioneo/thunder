@@ -15,17 +15,18 @@ import (
 type Response struct {
 	// Name of the song.
 	Name string `json:"name"`
-	// Current position. Formats as m:ss or h:mm:ss.
+	// Current position, formatted as m:ss or h:mm:ss.
 	Position string `json:"position"`
-	// Length of the song. Formats as m:ss or h:mm:ss.
+	// Length of the song, formatted as m:ss or h:mm:ss.
 	Length string `json:"length"`
-	// Volume set in thunder in percent format ( n% ).
+	// Volume level in percent (0-100).
 	Volume int `json:"volume"`
-	// Muted is true when song is muted.
+	// Muted is true when the volume is muted.
 	Muted bool `json:"muted"`
-	// Playing is true whether the current song is playing and it's not paused.
+	// Playing is true when a song is playing and not paused.
 	Playing bool `json:"playing"`
-	// Paused is here to distinguish between nothing is playing and the current song is paused.
+	// Paused is true when the current song is paused. It distinguishes
+	// a paused song from nothing playing at all.
 	Paused bool `json:"paused"`
 }
 

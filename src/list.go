@@ -110,11 +110,13 @@ type List struct {
 	horizontalOffset int
 
 	changed func(index int, text string)
+
+	selected func(selectedCount int)
 }
 
 func NewList() *List {
 	return &List{
-		Box:        tview.NewBox(),
+		Box:        tview.NewBox().SetBorderPadding(0, 0, 0, 1),
 		selection:  NewSelection(),
 		currentIdx: 0,
 		anchorIdx:  -1,
@@ -177,6 +179,10 @@ func (l *List) SetWrapAround(wrapAround bool) *List {
 func (l *List) SetChangedFunc(handler func(idx int, text string)) *List {
 	l.changed = handler
 	return l
+}
+
+func (l *List) SetSelectedFunc(handler func(selectedCount int)) {
+	l.selected = handler
 }
 
 func (l *List) GetSelectedItems() []Selectable {
@@ -386,7 +392,7 @@ func (l *List) Draw(screen tcell.Screen) {
 		}
 
 		selectedStyle := l.selectedStyle
-		selected := l.selection.Exist(listItem.item) && checkFocus
+		selected := l.selection.Exist(listItem.item)
 
 		if current {
 			if listItem.selectedStyle != nil {
@@ -530,6 +536,10 @@ func (l *List) InputHandler() func(e *tcell.EventKey, setFocus func(p tview.Prim
 				l.changed(l.currentIdx, l.items[l.currentIdx].text)
 			}
 			l.adjustOffset()
+		}
+
+		if l.selected != nil {
+			l.selected(len(l.selection.items))
 		}
 	})
 }

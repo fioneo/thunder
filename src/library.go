@@ -13,7 +13,9 @@ import (
 
 type Library struct {
 	*tview.Frame
+	flex        *tview.Flex
 	pages       *tview.Pages
+	info        *LibraryInfo
 	list        *List
 	files       []File
 	copied      []File
@@ -29,11 +31,18 @@ func NewLibrary(path string) *Library {
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
 
 	pages := tview.NewPages().AddPage("library", list, true, true).AddPage("empty_directory", emptyDirectory, true, false)
-	frame := tview.NewFrame(pages).SetBorders(0, 0, 0, 0, 0, 0)
+
+	info := NewLibraryInfo()
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(info, 1, 0, false).AddItem(pages, 0, 1, true)
+
+	wrapper := tview.NewFrame(flex).SetBorders(0, 0, 0, 0, 0, 0)
 
 	library := &Library{
-		Frame:       frame,
+		Frame:       wrapper,
+		flex:        flex,
 		pages:       pages,
+		info:        info,
 		list:        list,
 		currentPath: path,
 		idxHistory:  make(map[string]int),
@@ -48,14 +57,18 @@ func NewLibrary(path string) *Library {
 		library.UpdateInfo()
 	})
 
+	library.list.SetSelectedFunc(func(count int) {
+		info.SetSelectedCount(count)
+	})
+
 	library.SetInputCapture(library.handleKey)
 
 	colors := thunder.Colors
 	library.list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
 
 	library.
+		SetBorderPadding(0, 0, 1, 1).
 		SetBorder(true).
-		SetBorderPadding(0, 0, 0, 1).
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(thunder.Colors.Accent).
 		SetTitleColor(thunder.Colors.Accent).
@@ -72,7 +85,6 @@ func (l *Library) readDir(path string) error {
 
 	files := make([]File, 0, len(dirEntries))
 	l.list.Grow(len(dirEntries))
-	l.Frame.Clear()
 	l.Clear()
 
 	if len(dirEntries) != 0 {
@@ -100,7 +112,9 @@ func (l *Library) readDir(path string) error {
 	if dir != "/" {
 		dir += "/"
 	}
-	l.Frame.AddText(" "+dir, true, tview.AlignLeft, thunder.Colors.Playlist)
+	// l.Frame.AddText(" "+dir, true, tview.AlignLeft, thunder.Colors.Playlist)
+
+	l.info.SetCurrentDir(dir)
 	l.UpdateInfo()
 
 	return nil
@@ -315,6 +329,7 @@ func (l *Library) SetCurrentIdx(idx int) {
 	}
 	l.currentIdx = idx
 	l.list.SetCurrentIdx(idx)
+	l.UpdateInfo()
 }
 
 func (l *Library) selectedFiles() []File {
@@ -340,6 +355,8 @@ func (l *Library) Refresh() {
 		l.readDir(l.currentPath)
 		l.SetCurrentIdx(l.GetFileIdx(file.Path()))
 	}
+
+	l.UpdateInfo()
 }
 
 func (l *Library) UpdateInfo() {
@@ -376,43 +393,19 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			l.list.ClearSelected()
 			l.UpdateInfo()
 		}
-	case tcell.KeyCtrlC:
-		copied := l.Copy()
-
-		word := "file"
-
-		if copied > 1 {
-			word = "files"
-		}
-
-		if copied > 0 {
-			infoPopup("", fmt.Sprintf(
-				"Copied %d %s",
-				copied,
-				word,
-			))
-		}
-		l.UpdateInfo()
-	case tcell.KeyCtrlV:
-		pasted := l.Paste()
-
-		word := "file"
-
-		if pasted > 1 {
-			word = "files"
-		}
-
-		if pasted > 0 {
-			infoPopup("", fmt.Sprintf(
-				"Pasted %d %s",
-				pasted,
-				word,
-			))
-			l.Refresh()
+		if len(l.copied) != 0 {
 			l.copied = nil
+			l.info.SetCopiedCount(0)
 		}
-
-		l.UpdateInfo()
+	case tcell.KeyCtrlC:
+		l.Copy()
+		l.info.SetCopiedCount(len(l.copied))
+		l.Refresh()
+	case tcell.KeyCtrlV:
+		l.Paste()
+		l.copied = nil
+		l.info.SetCopiedCount(len(l.copied))
+		l.Refresh()
 	}
 	switch e.Rune() {
 	case 'l':

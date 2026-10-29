@@ -171,7 +171,7 @@ func start(app *tview.Application) {
 	app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		switch e.Key() {
 		case tcell.KeyCtrlC:
-			return e
+			return tcell.NewEventKey(tcell.KeyCtrlC, 0, 0)
 		case tcell.KeyCtrlQ:
 			cancel()
 			return nil

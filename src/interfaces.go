@@ -29,4 +29,6 @@ type Popup interface {
 	Hide()
 	Primitive() tview.Primitive
 	Focusable() bool
+	Focus()
+	Blur()
 }

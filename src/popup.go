@@ -355,7 +355,7 @@ func downloadPopup() {
 		AddItem(list, 0, 1, false)
 	frame := tview.NewFrame(flex)
 
-	// Cancels only when popup is closed.
+	// Cancels only when popup closed.
 	ctx, cancel := context.WithCancel(context.Background())
 
 	type downloadInfo struct {
@@ -436,7 +436,7 @@ func downloadPopup() {
 		frame.SetTitle("Fetching...")
 
 		go func() {
-			sctx, scancel := context.WithTimeout(ctx, 15*time.Second)
+			sctx, scancel := context.WithTimeout(ctx, 5*time.Second)
 			defer scancel()
 
 			format := fmt.Sprintf("ytsearch%d:%s", 20, query)
@@ -462,7 +462,7 @@ func downloadPopup() {
 				frame.SetTitle(title)
 
 				if err != nil {
-					errorPopup(fmt.Errorf("Search error\n.See log file."))
+					errorPopup(fmt.Errorf("Search error.\nSee log file."))
 					SendErr(err)
 					return
 				}

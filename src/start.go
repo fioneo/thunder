@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -66,19 +65,21 @@ Options:
   -h, --help          Print this help and exit.
   -s, --sock path     Control socket path (default: thunder.sock in the temp dir).
   -l, --log path      Log file path (default: thunder.log in the temp dir).
+  -p, --path path 	  Path to music directory (default: ~/Music).
   -v, --volume level  Initial volume (default: 100).
 
 Examples:
   thunder
-  thunder ~/music/song.mp3
+  thunder -p ~/music
   thunder -v 50 -s /tmp/thunder.sock ~/Music/song.mp3
 `
 
 type Args struct {
-	sockPath string
-	logPath  string
-	volume   int
-	song     string
+	sockPath  string
+	logPath   string
+	musicPath string
+	volume    int
+	song      string
 }
 
 func args() Args {
@@ -88,23 +89,33 @@ func args() Args {
 
 	tmp := os.TempDir()
 
-	sockPath := filepath.Join(tmp, "thunder.sock")
-	logPath := filepath.Join(tmp, "thunder.log")
-	song := ""
-	volume := 100
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "get home directory: %v", err)
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	var help bool
+
+	sockPath := filepath.Join(tmp, "thunder.sock")
+	logPath := filepath.Join(tmp, "thunder.log")
+	musicPath := filepath.Join(home, "Music")
+	song := ""
+	volume := 100
 
 	// long
 	flag.BoolVar(&help, "help", false, "")
 	flag.StringVar(&sockPath, "sock", sockPath, "")
 	flag.StringVar(&logPath, "log", logPath, "")
+	flag.StringVar(&musicPath, "path", musicPath, "")
 	flag.IntVar(&volume, "volume", 100, "")
 
 	// short
 	flag.BoolVar(&help, "h", false, "")
 	flag.StringVar(&sockPath, "s", sockPath, "")
 	flag.StringVar(&logPath, "l", logPath, "")
+	flag.StringVar(&musicPath, "p", musicPath, "")
 	flag.IntVar(&volume, "v", 100, "")
 
 	flag.Parse()
@@ -125,10 +136,11 @@ func args() Args {
 	}
 
 	return Args{
-		sockPath: sockPath,
-		logPath:  logPath,
-		volume:   volume,
-		song:     song,
+		sockPath:  sockPath,
+		logPath:   logPath,
+		musicPath: musicPath,
+		volume:    volume,
+		song:      song,
 	}
 }
 
@@ -157,21 +169,33 @@ func start(app *tview.Application) {
 	defer cancel()
 
 	app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		pageName, _ := thunder.Pages.GetFrontPage()
-		if pageName != "main" && !strings.Contains(pageName, "timeout_popup") {
-			return e
-		}
 		switch e.Key() {
 		case tcell.KeyCtrlC:
-			return tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone)
+			return e
 		case tcell.KeyCtrlQ:
 			cancel()
+			return nil
+		}
+
+		if thunder.Popups.Count() > 0 {
+			return e
+		}
+
+		switch e.Key() {
 		case tcell.KeyCtrlT:
 			downloadPopup()
+			return nil
 		case tcell.KeyTab:
 			thunder.CyclePanels(true)
+			return nil
 		case tcell.KeyBacktab:
 			thunder.CyclePanels(false)
+			return nil
+		case tcell.KeyRune:
+			if e.Rune() == 'q' {
+				cancel()
+				return nil
+			}
 		}
 		return thunder.handlePlaybackKey(e)
 	})
@@ -194,12 +218,12 @@ func start(app *tview.Application) {
 	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		redrawAndWrite(ctx)
 	}()
-
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		logErrors(ctx)
@@ -221,6 +245,7 @@ func start(app *tview.Application) {
 
 	defer func() {
 		if p := recover(); p != nil {
+			app.Stop()
 			thunder.Logger.Errorf("panic: %s", p)
 			fmt.Fprintf(os.Stderr, "Unexpected panic.\nSee log file.\n")
 		}

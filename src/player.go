@@ -13,13 +13,17 @@ import (
 )
 
 const (
+	// sampleRate is the sample rate of the speaker. Songs are resampled to it.
 	sampleRate = beep.SampleRate(48000)
 
+	// Volume is a power of 2 (effects.Volume with Base 2): 0 is the original
+	// loudness, negative values are quieter.
 	volumeStep = 0.5
 	minVolume  = -10.0
 	maxVolume  = 0.0
 )
 
+// audio holds everything related to the currently loaded song.
 type audio struct {
 	streamer beep.StreamSeekCloser
 	format   beep.Format
@@ -28,22 +32,29 @@ type audio struct {
 	length   time.Duration
 }
 
+// Player plays mp3 files through the speaker. It is safe for concurrent use.
 type Player struct {
-	mu           sync.Mutex
+	mu sync.Mutex
+	// speakerReady is true after the speaker has been initialized.
 	speakerReady bool
-	audio        *audio
-	volume       float64
-	muted        bool
+	// audio is the current song, or nil if nothing is loaded.
+	audio *audio
+	// volume and muted are kept here, so they are applied to every new song.
+	volume float64
+	muted  bool
 }
 
 var _ PlaybackEngine = (*Player)(nil)
 
+// NewPlayer creates a player with the given initial volume.
 func NewPlayer(volume float64) *Player {
 	return &Player{
 		volume: volume,
 	}
 }
 
+// Play stops the current song and starts the given one.
+// onFinished is called when the song ends on its own (not when it is stopped).
 func (p *Player) Play(song Song, onFinished func()) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -84,6 +95,7 @@ func (p *Player) Play(song Song, onFinished func()) error {
 	return nil
 }
 
+// initSpeaker initializes the speaker once. The caller must hold the lock.
 func (p *Player) initSpeaker() error {
 	if p.speakerReady {
 		return nil
@@ -95,12 +107,14 @@ func (p *Player) initSpeaker() error {
 	return nil
 }
 
+// Stop stops the current song. It does nothing if nothing is playing.
 func (p *Player) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.stop()
 }
 
+// stop clears the speaker and closes the current song. The caller must hold the lock.
 func (p *Player) stop() {
 	if p.audio == nil {
 		return
@@ -110,6 +124,7 @@ func (p *Player) stop() {
 	p.audio = nil
 }
 
+// TogglePause pauses the current song or resumes it if it is paused.
 func (p *Player) TogglePause() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -122,6 +137,8 @@ func (p *Player) TogglePause() {
 	p.audio.ctrl.Paused = !p.audio.ctrl.Paused
 }
 
+// Seek moves the position of the current song by delta (negative to go back).
+// The new position is limited to the bounds of the song.
 func (p *Player) Seek(delta time.Duration) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -141,6 +158,8 @@ func (p *Player) Seek(delta time.Duration) error {
 	return err
 }
 
+// Position returns the current position and the length of the song.
+// It returns zeros if nothing is loaded.
 func (p *Player) Position() (pos, length time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -153,6 +172,8 @@ func (p *Player) Position() (pos, length time.Duration) {
 	return p.audio.format.SampleRate.D(p.audio.streamer.Position()), p.audio.length
 }
 
+// ChangeVolume changes the volume by delta, limited to [minVolume, maxVolume].
+// The sound is muted at the minimum volume and unmuted otherwise.
 func (p *Player) ChangeVolume(delta float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -166,6 +187,8 @@ func (p *Player) ChangeVolume(delta float64) {
 	p.applyVolume()
 }
 
+// ToggleMute mutes the sound or unmutes it if it is muted.
+// The volume level is kept.
 func (p *Player) ToggleMute() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -174,12 +197,15 @@ func (p *Player) ToggleMute() {
 	p.applyVolume()
 }
 
+// Volume returns the current volume level and whether it is muted.
 func (p *Player) Volume() (level float64, muted bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.volume, p.muted
 }
 
+// applyVolume applies the volume and mute state to the current song.
+// The caller must hold the lock.
 func (p *Player) applyVolume() {
 	if p.audio == nil {
 		return

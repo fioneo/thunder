@@ -520,6 +520,24 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			idx := l.GetFileIdx(newPath)
 			l.SetCurrentIdx(idx)
 		})
+	case 'n':
+		name := "New Directory"
+
+		inputPopup("Create directory", name, name, func(ok bool, dirName string) {
+			if !ok {
+				return
+			}
+
+			name = dirName
+			path := filepath.Join(l.currentPath, name)
+
+			if err := os.Mkdir(path, 0755); err != nil {
+				SendErr(err)
+				return
+			}
+
+			l.Refresh()
+		})
 	}
 	return e
 }

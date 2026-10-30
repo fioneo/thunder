@@ -112,7 +112,6 @@ func (l *Library) readDir(path string) error {
 	if dir != "/" {
 		dir += "/"
 	}
-	// l.Frame.AddText(" "+dir, true, tview.AlignLeft, thunder.Colors.Playlist)
 
 	l.info.SetCurrentDir(dir)
 	l.UpdateInfo()
@@ -141,10 +140,18 @@ func (l *Library) Remove(idx int) error {
 		l.currentIdx--
 	}
 
+	if len(l.copied) == 0 {
+		return err
+	}
+
+	for idx, f := range l.copied {
+		if f.Path() == file.Path() {
+			l.copied = append(l.copied[:idx], l.copied[idx+1:]...)
+		}
+	}
+
 	return err
 }
-
-// TODO: Make it more simple, log errors
 
 func (l *Library) RemoveSelected() {
 	selectedItems := l.list.GetSelectedItems()
@@ -164,7 +171,8 @@ func (l *Library) RemoveSelected() {
 		}
 	}
 
-	// This is crucial, because removing in ascending order shifts elements, and eventually we can get an index out of range (panic)
+	// This is crucial, because removing in ascending order shifts elements,
+	// and eventually we can get an index out of range
 	sort.Slice(indices, func(i, j int) bool {
 		return indices[i] > indices[j]
 	})
@@ -200,21 +208,14 @@ func (l *Library) Copy() int {
 
 	if len(files) != 0 {
 		for _, file := range files {
-			if _, ok := c[file.Path()]; ok {
-				infoPopup(file.Path(), "file is already copied")
-				thunder.Logger.Info(fmt.Sprintf("%s: file is already copied", file.Path()))
-				continue
+			if _, ok := c[file.Path()]; !ok {
+				l.copied = append(l.copied, file)
+				copied++
 			}
-			l.copied = append(l.copied, file)
-			copied++
 		}
 	} else {
 		file := l.files[idx]
-
-		if _, ok := c[file.Path()]; ok {
-			infoPopup(file.Path(), "file is already copied")
-			thunder.Logger.Info(fmt.Sprintf("%s: file is already copied", file.Path()))
-		} else {
+		if _, ok := c[file.Path()]; !ok {
 			l.copied = append(l.copied, file)
 			copied++
 		}
@@ -249,7 +250,6 @@ func (l *Library) PasteFile(file File, path string) bool {
 	from, err := os.Open(file.Path())
 	if err != nil {
 		SendErr(err)
-		errorPopup(err)
 		return false
 	}
 	defer from.Close()
@@ -258,7 +258,6 @@ func (l *Library) PasteFile(file File, path string) bool {
 	to, err := os.OpenFile(toPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
 		SendErr(err)
-		errorPopup(err)
 		return false
 	}
 	defer to.Close()
@@ -276,7 +275,6 @@ func (l *Library) PasteDir(fromDir File, path string) bool {
 	dirEntries, err := os.ReadDir(fromDir.Path())
 	if err != nil {
 		SendErr(err)
-		errorPopup(err)
 		return false
 	}
 
@@ -294,7 +292,6 @@ func (l *Library) PasteDir(fromDir File, path string) bool {
 
 	if err != nil {
 		SendErr(err)
-		errorPopup(err)
 		return false
 	}
 
@@ -399,13 +396,13 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		}
 	case tcell.KeyCtrlC:
 		l.Copy()
-		l.info.SetCopiedCount(len(l.copied))
 		l.Refresh()
+		l.info.SetCopiedCount(len(l.copied))
 	case tcell.KeyCtrlV:
 		l.Paste()
 		l.copied = nil
-		l.info.SetCopiedCount(len(l.copied))
 		l.Refresh()
+		l.info.SetCopiedCount(0)
 	}
 	switch e.Rune() {
 	case 'l':
@@ -444,7 +441,6 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 		if err := l.readDir(path); err != nil {
 			SendErr(err)
-			errorPopup(err)
 			return e
 		}
 		l.idxHistory[currentPath] = idx
@@ -453,14 +449,10 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 		if err := l.readDir(path); err != nil {
 			thunder.ErrCh <- err
-			errorPopup(err)
 			return e
 		}
 
 		if idx, ok := l.idxHistory[path]; ok {
-			// if idx < 0 || idx >= len(l.files) {
-			// 	return e
-			// }
 			l.SetCurrentIdx(idx)
 		}
 	case 'd':
@@ -471,6 +463,7 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 				if label == "yes" {
 					l.RemoveSelected()
 					l.list.ClearSelected()
+					l.info.SetCopiedCount(len(l.copied))
 					l.UpdateInfo()
 				}
 			})
@@ -497,7 +490,6 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 			if label == "yes" {
 				if err := l.Remove(idx); err != nil {
 					SendErr(err)
-					errorPopup(err)
 				}
 			}
 		})
@@ -521,7 +513,6 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 
 			if err := l.Rename(file.Path(), newPath); err != nil {
 				SendErr(err)
-				errorPopup(err)
 				return
 			}
 

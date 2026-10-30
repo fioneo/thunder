@@ -352,15 +352,17 @@ func (c *PlaybackController) start(song Song) bool {
 	gen := c.generation
 	c.paused = false
 
-	err := c.engine.Play(song, func() {
+	pErr := c.engine.Play(song, func() {
 		go c.handleFinished(gen)
 	})
-	if err != nil {
+	if pErr != nil {
+		err := ErrorMessage{
+			err:     pErr,
+			errView: fmt.Errorf("[ %s ]\nError playing song.\nSee log file for details.", song.Name()),
+		}
 		c.errs = append(c.errs, err)
 		return false
 	}
-
-	thunder.Logger.Info(fmt.Sprintf("Start playing song: %s", song.Name()))
 	return true
 }
 

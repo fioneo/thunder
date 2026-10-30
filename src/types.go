@@ -77,3 +77,18 @@ func (f *file) Name() string {
 func (f *file) Path() string {
 	return f.path
 }
+
+// ErrorMessage wraps an error that is too big to show on the screen as is,
+// because calculating its width and height is not trivial.
+// err is written to the log file, and errView is a short description
+// of what happened, which is shown on the screen.
+type ErrorMessage struct {
+	err     error
+	errView error
+}
+
+// Error is never called. It exists only so that ErrorMessage
+// implements the error interface.
+func (m ErrorMessage) Error() string {
+	return ""
+}

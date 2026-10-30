@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+func init() {
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
+}
+
 const redrawInterval = 500 * time.Millisecond
 
 func redrawAndWrite(ctx context.Context) {
@@ -34,24 +43,51 @@ func redrawAndWrite(ctx context.Context) {
 
 }
 
-func logErrors(ctx context.Context) {
+func logAndShowErrors(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			// Log all remaining errors
 			for {
 				select {
 				case err := <-thunder.ErrCh:
-					if err != nil {
-						thunder.Logger.Error(err)
+					if err == nil {
+						return
 					}
+					var errView error
+
+					if m, ok := err.(ErrorMessage); ok && m.err != nil {
+						err = m.err
+						errView = m.errView
+					}
+
+					if errView == nil {
+						errView = err
+					}
+
+					thunder.Logger.Error(err)
+					onUI(func() { errorPopup(errView) })
 				default:
 					return
 				}
 			}
 		case err := <-thunder.ErrCh:
-			if err != nil {
-				thunder.Logger.Error(err)
+			if err == nil {
+				return
 			}
+			var errView error
+
+			if m, ok := err.(ErrorMessage); ok && m.err != nil {
+				err = m.err
+				errView = m.errView
+			}
+
+			if errView == nil {
+				errView = err
+			}
+
+			thunder.Logger.Error(err)
+			onUI(func() { errorPopup(errView) })
 		}
 	}
 }
@@ -218,15 +254,14 @@ func start(app *tview.Application) {
 	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		redrawAndWrite(ctx)
 	}()
-	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logErrors(ctx)
+		logAndShowErrors(ctx)
 	}()
 
 	go func() {
@@ -247,7 +282,7 @@ func start(app *tview.Application) {
 		if p := recover(); p != nil {
 			app.Stop()
 			thunder.Logger.Errorf("panic: %s", p)
-			fmt.Fprintf(os.Stderr, "Unexpected panic.\nSee log file.\n")
+			fmt.Fprintf(os.Stderr, "Unexpected panic.\nSee log file for details.\n")
 		}
 	}()
 

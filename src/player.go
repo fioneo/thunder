@@ -63,18 +63,18 @@ func (p *Player) Play(song Song, onFinished func()) error {
 
 	f, err := os.Open(song.Path())
 	if err != nil {
-		return fmt.Errorf("[ %s ]\nOpen file: %w", song.Name(), err)
+		return fmt.Errorf("[ %s ] Open file: %w", song.Name(), err)
 	}
 
 	streamer, format, err := mp3.Decode(f)
 	if err != nil {
 		f.Close()
-		return fmt.Errorf("[ %s ]\nDecode song: %w", song.Name(), err)
+		return fmt.Errorf("[ %s ] Decode song: %w", song.Name(), err)
 	}
 
 	if err := p.initSpeaker(); err != nil {
 		streamer.Close()
-		return fmt.Errorf("[ %s ]\nInitialize speaker: %w", song.Name(), err)
+		return fmt.Errorf("[ %s ] Initialize speaker: %w", song.Name(), err)
 	}
 
 	ctrl := &beep.Ctrl{Streamer: beep.Resample(4, format.SampleRate, sampleRate, streamer)}

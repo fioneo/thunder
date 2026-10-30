@@ -254,15 +254,16 @@ func errorPopup(err error) {
 	if err == nil {
 		return
 	}
-	timeoutPopup(err.Error(), 3*time.Second, tcell.ColorRed, tcell.ColorRed)
+	lines := strings.Split(err.Error(), "\n")
+	timeoutPopup(err.Error(), 3*time.Second, tcell.ColorRed, tcell.ColorRed, 0, len(lines))
 }
 
 func infoPopup(title, desc string) {
 	text := fmt.Sprintf("%s\n%s", title, desc)
-	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground)
+	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground, 0, len(text))
 }
 
-func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color) {
+func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color, width, height int) {
 	textView := tview.NewTextView().
 		SetText(text).
 		SetTextColor(textColor).SetTextAlign(tview.AlignCenter)
@@ -270,7 +271,8 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
 		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
-	popup := NewTimeoutPopup(textView, nextID("timeout_popup"), false, TopRight, timeout, 0, 0, 7, 0)
+	height += 4 // 2 padding + 2 for borders
+	popup := NewTimeoutPopup(textView, nextID("timeout_popup"), false, TopRight, timeout, 0, 0, height, 0)
 
 	thunder.Popups.Show(popup)
 }
@@ -440,13 +442,13 @@ func downloadPopup() {
 			defer scancel()
 
 			format := fmt.Sprintf("ytsearch%d:%s", 20, query)
-			out, err := exec.CommandContext(sctx, "yt-dlp", format, "--flat-playlist", "--dump-single-json").Output()
+			out, sErr := exec.CommandContext(sctx, "yt-dlp", format, "--flat-playlist", "--dump-single-json").Output()
 
 			var res searchResult
-			if err != nil {
-				err = fmt.Errorf("yt-dlp search: %w", err)
+			if sErr != nil {
+				sErr = fmt.Errorf("yt-dlp search: %w", sErr)
 			} else if jerr := json.Unmarshal(out, &res); jerr != nil {
-				err = fmt.Errorf("parse search result: %w", jerr)
+				sErr = fmt.Errorf("parse search result: %w", jerr)
 			}
 
 			// Popup already closed
@@ -461,8 +463,11 @@ func downloadPopup() {
 				}
 				frame.SetTitle(title)
 
-				if err != nil {
-					errorPopup(fmt.Errorf("Search error.\nSee log file."))
+				if sErr != nil {
+					err := ErrorMessage{
+						err:     sErr,
+						errView: fmt.Errorf("Search error.\nSee log file."),
+					}
 					SendErr(err)
 					return
 				}
@@ -501,7 +506,6 @@ func downloadPopup() {
 			onUI(func() {
 				downloading = false
 				frame.SetTitle(title)
-				errorPopup(err)
 			})
 		}
 

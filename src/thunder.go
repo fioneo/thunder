@@ -40,13 +40,10 @@ func (t *Thunder) InitPanels(app *tview.Application, args Args) {
 	t.Panels = []Panel{t.Library, t.Queue, t.PlayBar}
 
 	t.Playback.OnChange(func(s Snapshot) {
-		go app.QueueUpdateDraw(func() { t.renderPlayback(s) })
+		go onUI(func() { t.renderPlayback(s) })
 	})
 	t.Playback.OnError(func(err error) {
 		SendErr(err)
-		go app.QueueUpdateDraw(func() {
-			errorPopup(err)
-		})
 	})
 }
 
@@ -73,24 +70,7 @@ func (t *Thunder) renderPlayback(s Snapshot) {
 	t.Server.Write(s)
 }
 
-func (t *Thunder) SendErr(err error) {
-	if err == nil {
-		return
-	}
-	select {
-	case t.ErrCh <- err:
-	default:
-	}
-}
-
 func NewThunder() *Thunder {
-
-	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
-	tview.Borders.VerticalFocus = tview.Borders.Vertical
-	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
-	tview.Borders.TopRightFocus = tview.Borders.TopRight
-	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
-	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 	return &Thunder{
 		Colors: DefaultColors(),
 		ErrCh:  make(chan error, 64),

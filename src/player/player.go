@@ -18,10 +18,15 @@ const (
 
 	// Volume is a power of 2 (effects.Volume with Base 2): 0 is the original
 	// loudness, negative values are quieter.
-	volumeStep = 0.5
+	VolumeStep = 0.5
 	minVolume  = -10.0
 	maxVolume  = 0.0
 )
+
+type Song interface {
+	Name() string
+	Path() string
+}
 
 // audio holds everything related to the currently loaded song.
 type audio struct {
@@ -44,10 +49,8 @@ type Player struct {
 	muted  bool
 }
 
-var _ PlaybackEngine = (*Player)(nil)
-
 // NewPlayer creates a player with the given initial volume.
-func NewPlayer(volume float64) *Player {
+func New(volume float64) *Player {
 	return &Player{
 		volume: volume,
 	}

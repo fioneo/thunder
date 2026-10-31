@@ -5,12 +5,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-type Song interface {
-	Name() string
-	Path() string
-	// Length() time.Duration
-}
-
 type Panel interface {
 	HasFocus() bool
 	SetBorderColor(tcell.Color) *tview.Box

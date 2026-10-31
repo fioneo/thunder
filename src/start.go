@@ -15,6 +15,13 @@ import (
 )
 
 func init() {
+	tview.Borders.Horizontal = '─'
+	tview.Borders.Vertical = '│'
+	tview.Borders.TopLeft = '╭'
+	tview.Borders.TopRight = '╮'
+	tview.Borders.BottomLeft = '╰'
+	tview.Borders.BottomRight = '╯'
+
 	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
 	tview.Borders.VerticalFocus = tview.Borders.Vertical
 	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
@@ -101,7 +108,8 @@ Options:
   -h, --help          Print this help and exit.
   -s, --sock path     Control socket path (default: thunder.sock in the temp dir).
   -l, --log path      Log file path (default: thunder.log in the temp dir).
-  -p, --path path 	  Path to music directory (default: ~/Music).
+  -c, --config path   Config file path.
+  -m, --music path 	  Path to music directory (default: ~/Music).
   -v, --volume level  Initial volume (default: 100).
 
 Examples:
@@ -114,6 +122,7 @@ type Args struct {
 	sockPath  string
 	logPath   string
 	musicPath string
+	cfgPath   string
 	volume    int
 	song      string
 }
@@ -132,10 +141,18 @@ func args() Args {
 		os.Exit(1)
 	}
 
+	config, err := os.UserConfigDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "get config directory: %v", err)
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	var help bool
 
 	sockPath := filepath.Join(tmp, "thunder.sock")
 	logPath := filepath.Join(tmp, "thunder.log")
+	cfgPath := filepath.Join(config, "thunder/config.json")
 	musicPath := filepath.Join(home, "Music")
 	song := ""
 	volume := 100
@@ -144,14 +161,16 @@ func args() Args {
 	flag.BoolVar(&help, "help", false, "")
 	flag.StringVar(&sockPath, "sock", sockPath, "")
 	flag.StringVar(&logPath, "log", logPath, "")
-	flag.StringVar(&musicPath, "path", musicPath, "")
+	flag.StringVar(&cfgPath, "config", cfgPath, "")
+	flag.StringVar(&musicPath, "music", musicPath, "")
 	flag.IntVar(&volume, "volume", 100, "")
 
 	// short
 	flag.BoolVar(&help, "h", false, "")
 	flag.StringVar(&sockPath, "s", sockPath, "")
 	flag.StringVar(&logPath, "l", logPath, "")
-	flag.StringVar(&musicPath, "p", musicPath, "")
+	flag.StringVar(&cfgPath, "c", cfgPath, "")
+	flag.StringVar(&musicPath, "m", musicPath, "")
 	flag.IntVar(&volume, "v", 100, "")
 
 	flag.Parse()
@@ -175,6 +194,7 @@ func args() Args {
 		sockPath:  sockPath,
 		logPath:   logPath,
 		musicPath: musicPath,
+		cfgPath:   cfgPath,
 		volume:    volume,
 		song:      song,
 	}
@@ -183,8 +203,11 @@ func args() Args {
 func start(app *tview.Application) {
 	thunder = NewThunder()
 	args := args()
-	thunder.InitLogger(args)
 
+	thunder.ParseConfig(args)
+	colors = thunder.Config.Colors
+
+	thunder.InitLogger(args)
 	thunder.InitPanels(app, args)
 	thunder.InitServer(args)
 
@@ -251,7 +274,7 @@ func start(app *tview.Application) {
 		return false
 	})
 
-	tview.Styles.PrimitiveBackgroundColor = thunder.Colors.Background
+	tview.Styles.PrimitiveBackgroundColor = colors.Background
 
 	var wg sync.WaitGroup
 	wg.Add(2)

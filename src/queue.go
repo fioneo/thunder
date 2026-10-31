@@ -24,11 +24,11 @@ type QueueView struct {
 }
 
 func NewQueueView(ctrl *PlaybackController) *QueueView {
-	colors := thunder.Colors
+	colors := colors
 	background := tcell.StyleDefault.Background(colors.Background)
 
 	list := NewList()
-	list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
+	list.ApplySongStyles().SetBackgroundColor(colors.Background)
 
 	empty := tview.NewTextView().
 		SetText("  queue is empty").
@@ -58,9 +58,9 @@ func NewQueueView(ctrl *PlaybackController) *QueueView {
 	q.SetInputCapture(q.handleKey)
 
 	q.SetBorder(true).
-		SetBorderColor(thunder.Colors.Foreground).
-		SetTitleColor(thunder.Colors.Foreground).
-		SetBackgroundColor(thunder.Colors.Background)
+		SetBorderColor(colors.Foreground).
+		SetTitleColor(colors.Foreground).
+		SetBackgroundColor(colors.Background)
 
 	return q
 }

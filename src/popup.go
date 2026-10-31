@@ -222,13 +222,13 @@ func (pm *PopupManager) Count() int {
 func confirmationPopup(text string, handler func(int, string)) {
 	modal := tview.NewModal().
 		SetText(text).
-		SetBackgroundColor(thunder.Colors.Background).
+		SetBackgroundColor(colors.Background).
 		AddButtons([]string{"no", "yes"}).
-		SetButtonStyle(tcell.StyleDefault.Foreground(thunder.Colors.Accent).Background(thunder.Colors.Background)).
-		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Accent))
+		SetButtonStyle(tcell.StyleDefault.Foreground(colors.Accent).Background(colors.Background)).
+		SetButtonActivatedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Accent))
 
-	modal.SetBorderColor(thunder.Colors.Accent).
-		SetBackgroundColor(thunder.Colors.Background)
+	modal.SetBorderColor(colors.Accent).
+		SetBackgroundColor(colors.Background)
 
 	modal.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		switch e.Rune() {
@@ -261,7 +261,7 @@ func errorPopup(err error) {
 
 func infoPopup(text string) {
 	lines := strings.Count(text, "\n")
-	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground, 0, lines)
+	timeoutPopup(text, 3*time.Second, colors.Accent, colors.Foreground, 0, lines)
 }
 
 func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color, width, height int) {
@@ -269,7 +269,7 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 		SetText(text).
 		SetTextColor(textColor).SetTextAlign(tview.AlignCenter)
 
-	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
+	textView.SetBackgroundColor(colors.Background).SetBorder(true).
 		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
 	height += 4 // 2 for padding + 2 for borders
@@ -279,7 +279,6 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 }
 
 func inputPopup(title, placeholder, text string, handler func(ok bool, text string)) {
-	colors := thunder.Colors
 	textStyle := tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background)
 	placeholderStyle := tcell.StyleDefault.Foreground(tcell.ColorGrey).Background(colors.Background)
 
@@ -344,7 +343,6 @@ func center(p tview.Primitive, width, proportionWidth, height, proportionHeight 
 }
 
 func downloadPopup() {
-	colors := thunder.Colors
 	textStyle := tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background)
 	placeholderStyle := tcell.StyleDefault.Foreground(tcell.ColorGrey).Background(colors.Background)
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/fioneo/thunder/src/player"
 	"sync"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 // PlaybackEngine is implemented by Player.
 type PlaybackEngine interface {
 	// Play starts playing the song and calls onFinished when it ends.
-	Play(song Song, onFinished func()) error
+	Play(song player.Song, onFinished func()) error
 	// Stop stops the current song.
 	Stop()
 	// TogglePause pauses the current song or resumes it if it is paused.
@@ -31,9 +32,9 @@ type Snapshot struct {
 	// Version increases on every change of the controller state.
 	Version uint64
 	// Now is the current song, or nil if nothing is playing.
-	Now Song
+	Now player.Song
 	// Upcoming is the list of songs that will play next.
-	Upcoming []Song
+	Upcoming []player.Song
 	// Paused is true when the current song is paused.
 	Paused bool
 	// Mode is the current play mode.
@@ -168,7 +169,7 @@ func (c *PlaybackController) Progress() (pos, length time.Duration) {
 }
 
 // PlayFrom replaces the current queue with the given songs and starts playing.
-func (c *PlaybackController) PlayFrom(songs []Song) {
+func (c *PlaybackController) PlayFrom(songs []player.Song) {
 	c.do(func() bool {
 		c.queue.PlayFrom(songs)
 		c.next()
@@ -280,7 +281,7 @@ func (c *PlaybackController) CycleMode() (mode PlayMode) {
 }
 
 // Enqueue adds songs to the end of the queue. It does not start playback.
-func (c *PlaybackController) Enqueue(songs ...Song) (added, skipped int) {
+func (c *PlaybackController) Enqueue(songs ...player.Song) (added, skipped int) {
 	c.do(func() bool {
 		added, skipped = c.queue.Enqueue(songs...)
 		return added > 0
@@ -347,7 +348,7 @@ func (c *PlaybackController) next() {
 // start starts playing the song and reports whether it succeeded.
 // On failure the error is saved and passed to the OnError callback.
 // The caller must hold the lock.
-func (c *PlaybackController) start(song Song) bool {
+func (c *PlaybackController) start(song player.Song) bool {
 	c.generation++
 	gen := c.generation
 	c.paused = false

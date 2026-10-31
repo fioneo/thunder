@@ -28,7 +28,7 @@ func NewLibrary(path string) *Library {
 	list := NewList()
 	emptyDirectory := tview.NewTextView().
 		SetText(" empty directory").
-		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
+		SetTextStyle(tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background))
 
 	pages := tview.NewPages().AddPage("library", list, true, true).AddPage("empty_directory", emptyDirectory, true, false)
 	info := NewLibraryInfo()
@@ -61,16 +61,16 @@ func NewLibrary(path string) *Library {
 
 	library.SetInputCapture(library.handleKey)
 
-	colors := thunder.Colors
-	library.list.ApplySongStyles(colors).SetBackgroundColor(colors.Background)
+	colors := colors
+	library.list.ApplySongStyles().SetBackgroundColor(colors.Background)
 
 	library.
 		SetBorderPadding(0, 0, 1, 1).
 		SetBorder(true).
 		SetTitleAlign(tview.AlignLeft).
-		SetBorderColor(thunder.Colors.Accent).
-		SetTitleColor(thunder.Colors.Accent).
-		SetBackgroundColor(thunder.Colors.Background)
+		SetBorderColor(colors.Accent).
+		SetTitleColor(colors.Accent).
+		SetBackgroundColor(colors.Background)
 
 	return library
 }
@@ -564,17 +564,17 @@ func (l *Library) GetStyle(file File) (*tcell.Style, *tcell.Style) {
 }
 
 func (l *Library) songStyle() tcell.Style {
-	return tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background)
+	return tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background)
 }
 
 func (l *Library) songSelectedStyle() tcell.Style {
-	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Song)
+	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Song)
 }
 
 func (l *Library) dirStyle() tcell.Style {
-	return tcell.StyleDefault.Foreground(thunder.Colors.Playlist).Background(thunder.Colors.Background)
+	return tcell.StyleDefault.Foreground(colors.Directory).Background(colors.Background)
 }
 
 func (l *Library) dirSelectedStyle() tcell.Style {
-	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(thunder.Colors.Playlist)
+	return tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Directory)
 }

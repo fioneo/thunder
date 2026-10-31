@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fioneo/thunder/src/player"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -13,12 +14,12 @@ func exit(err error) {
 	os.Exit(1)
 }
 
-func fileToSong(file File) Song {
+func fileToSong(file File) player.Song {
 	return NewSong(file.Name(), file.Path())
 }
 
-func filesToSongs(files []File) []Song {
-	songs := make([]Song, 0, len(files))
+func filesToSongs(files []File) []player.Song {
+	songs := make([]player.Song, 0, len(files))
 	for _, f := range files {
 		if f.IsDir() {
 			continue
@@ -51,11 +52,11 @@ func printListItem(screen tcell.Screen, text string, x, y, skipWidth, maxWidth i
 	if selected {
 		screen.SetContent(x, y, ' ', nil, selectedStyle)
 	} else {
-		screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
+		screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(colors.Background))
 	}
 
 	x++
-	screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(thunder.Colors.Background))
+	screen.SetContent(x, y, ' ', nil, tcell.StyleDefault.Background(colors.Background))
 	x++
 	printedWidth += 2
 

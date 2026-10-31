@@ -17,7 +17,7 @@ type LibraryInfo struct {
 func NewLibraryInfo() *LibraryInfo {
 	return &LibraryInfo{
 		Box: tview.NewBox().
-			SetBackgroundColor(thunder.Colors.Background),
+			SetBackgroundColor(colors.Background),
 	}
 }
 
@@ -28,7 +28,7 @@ func (li *LibraryInfo) SetSelectedCount(selected int) { li.selected = selected }
 func (li *LibraryInfo) SetCopiedCount(copied int) { li.copied = copied }
 
 func (li *LibraryInfo) Draw(screen tcell.Screen) {
-	colors := thunder.Colors
+	colors := colors
 	li.Box.DrawForSubclass(screen, li)
 
 	x, y, width, height := li.GetInnerRect()
@@ -38,7 +38,7 @@ func (li *LibraryInfo) Draw(screen tcell.Screen) {
 
 	base := tcell.StyleDefault.Background(colors.Background)
 
-	printed := PrintText(screen, x, y, width, li.currentDir, base.Foreground(colors.Playlist))
+	printed := PrintText(screen, x, y, width, li.currentDir, base.Foreground(colors.Directory))
 
 	offsetRight := 0
 

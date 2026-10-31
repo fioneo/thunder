@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fioneo/thunder/src/player"
 	"math/rand"
 	"slices"
 )
@@ -9,9 +10,9 @@ import (
 // and the history of played songs. It is not safe for concurrent use;
 // PlaybackController guards it with a mutex.
 type Queue struct {
-	now      Song
-	upcoming []Song
-	history  []Song
+	now      player.Song
+	upcoming []player.Song
+	history  []player.Song
 	mode     PlayMode
 }
 
@@ -21,10 +22,10 @@ func NewQueue() *Queue {
 }
 
 // Now returns the current song, or nil if there is none.
-func (q *Queue) Now() Song { return q.now }
+func (q *Queue) Now() player.Song { return q.now }
 
 // Upcoming returns a copy of the upcoming songs.
-func (q *Queue) Upcoming() []Song { return slices.Clone(q.upcoming) }
+func (q *Queue) Upcoming() []player.Song { return slices.Clone(q.upcoming) }
 
 // Len returns the number of upcoming songs.
 func (q *Queue) Len() int { return len(q.upcoming) }
@@ -48,7 +49,7 @@ func (q *Queue) Shuffle() {
 // Enqueue adds songs to the end of the queue.
 // It skips nil songs and songs that are already in the queue,
 // including the current one. It returns the number of added and skipped songs.
-func (q *Queue) Enqueue(songs ...Song) (added, skipped int) {
+func (q *Queue) Enqueue(songs ...player.Song) (added, skipped int) {
 	seen := make(map[string]struct{}, len(q.upcoming)+1)
 	if q.now != nil {
 		seen[q.now.Path()] = struct{}{}
@@ -75,7 +76,7 @@ func (q *Queue) Enqueue(songs ...Song) (added, skipped int) {
 
 // PlayFrom replaces everything in the queue with the given songs.
 // It does not select the current song; call Next for that.
-func (q *Queue) PlayFrom(songs []Song) {
+func (q *Queue) PlayFrom(songs []player.Song) {
 	q.Reset()
 	q.Enqueue(songs...)
 }
@@ -85,7 +86,7 @@ func (q *Queue) PlayFrom(songs []Song) {
 // Otherwise the current song goes to the history. When no upcoming songs are
 // left, the history becomes the upcoming songs (the queue starts over).
 // It returns false if there is nothing to play.
-func (q *Queue) Next() (Song, bool) {
+func (q *Queue) Next() (player.Song, bool) {
 	// In repeat mode, keep playing the current song.
 	if q.mode == RepeatMode {
 		if q.now != nil {
@@ -108,7 +109,7 @@ func (q *Queue) Next() (Song, bool) {
 // Previous goes back to the last song in the history and returns it.
 // The current song is put at the start of the upcoming songs.
 // It returns false if the history is empty.
-func (q *Queue) Previous() (Song, bool) {
+func (q *Queue) Previous() (player.Song, bool) {
 	n := len(q.history)
 	if n == 0 {
 		return nil, false
@@ -118,7 +119,7 @@ func (q *Queue) Previous() (Song, bool) {
 	q.history = q.history[:n-1]
 
 	// Make sure the song does not appear twice in the queue.
-	q.upcoming = slices.DeleteFunc(q.upcoming, func(s Song) bool {
+	q.upcoming = slices.DeleteFunc(q.upcoming, func(s player.Song) bool {
 		return s.Path() == prev.Path()
 	})
 	if q.now != nil {
@@ -131,7 +132,7 @@ func (q *Queue) Previous() (Song, bool) {
 // JumpTo makes the upcoming song at idx the current one and returns it.
 // The previous current song and all upcoming songs before idx are added
 // to the history. It returns false if idx is out of range.
-func (q *Queue) JumpTo(idx int) (Song, bool) {
+func (q *Queue) JumpTo(idx int) (player.Song, bool) {
 	if idx < 0 || idx >= len(q.upcoming) {
 		return nil, false
 	}

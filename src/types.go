@@ -29,14 +29,12 @@ func (pm PlayMode) ToString() string {
 type song struct {
 	name string
 	path string
-	// length time.Duration
 }
 
 func NewSong(name, path string) *song {
 	return &song{
 		name: name,
 		path: path,
-		// length: length,
 	}
 }
 

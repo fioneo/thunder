@@ -286,12 +286,12 @@ func (l *List) Reset(entries []ListEntry) {
 	l.adjustOffset()
 }
 
-func (l *List) ApplySongStyles(c *Colors) *List {
+func (l *List) ApplySongStyles() *List {
 	return l.
-		SetTextStyle(tcell.StyleDefault.Foreground(c.Song).Background(c.Background)).
+		SetTextStyle(tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background)).
 		SetSelectedFocusOnly(true).
-		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(c.Song)).
-		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(c.Selected)).
+		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Song)).
+		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Selected)).
 		SetHighlightFullLine(true).
 		SetWrapAround(false)
 }
@@ -309,6 +309,9 @@ func (l *List) Clear() *List {
 
 func (l *List) ClearSelected() {
 	l.selection.Clear()
+	if l.selected != nil {
+		l.selected(0)
+	}
 	l.anchorIdx = -1
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"github.com/fioneo/thunder/src/player"
 	"io"
 	"net"
 	"os"
@@ -170,9 +171,9 @@ func (s *Server) read(conn net.Conn) {
 			case "TOGGLE_MUTE":
 				s.ctrl.ToggleMute()
 			case "VOL_UP":
-				s.ctrl.ChangeVolume(volumeStep)
+				s.ctrl.ChangeVolume(player.VolumeStep)
 			case "VOL_DOWN":
-				s.ctrl.ChangeVolume(-volumeStep)
+				s.ctrl.ChangeVolume(-player.VolumeStep)
 			case "SEEK_BACKWARD":
 				s.ctrl.Seek(seekStep)
 			case "SEEK_FORWARD":

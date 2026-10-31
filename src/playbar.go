@@ -23,9 +23,9 @@ func NewPlayBar(progress func() (pos, length time.Duration)) *PlayBar {
 
 	bar.SetBorder(true).
 		SetTitle("Now Playing").
-		SetBorderColor(thunder.Colors.Foreground).
-		SetTitleColor(thunder.Colors.Foreground).
-		SetBackgroundColor(thunder.Colors.Background)
+		SetBorderColor(colors.Foreground).
+		SetTitleColor(colors.Foreground).
+		SetBackgroundColor(colors.Background)
 
 	return bar
 }
@@ -59,7 +59,7 @@ func (b *PlayBar) Draw(screen tcell.Screen) {
 		return
 	}
 
-	colors := thunder.Colors
+	colors := colors
 	base := tcell.StyleDefault.Background(colors.Background)
 	s := b.snap
 
@@ -101,7 +101,6 @@ func (b *PlayBar) Draw(screen tcell.Screen) {
 }
 
 func (b *PlayBar) drawProgress(screen tcell.Screen, x, y, width int, pos, length time.Duration, base tcell.Style) {
-	colors := thunder.Colors
 	left, right := fmtDuration(pos), fmtDuration(length)
 
 	barWidth := width - len(left) - len(right) - 2

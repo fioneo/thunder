@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"github.com/fioneo/thunder/src/config"
 	"github.com/fioneo/thunder/src/logger"
+	"github.com/fioneo/thunder/src/player"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"sync"
@@ -9,6 +12,7 @@ import (
 )
 
 var thunder *Thunder
+var colors config.Colors
 
 type Thunder struct {
 	App             *tview.Application
@@ -19,9 +23,9 @@ type Thunder struct {
 	Playback        *PlaybackController
 	Panels          []Panel
 	Popups          *PopupManager
-	Colors          *Colors
 	Server          *Server
 	Logger          *logger.Logger
+	Config          *config.Config
 	ErrCh           chan error
 	CurrentPanelIdx int
 	stopOnce        sync.Once
@@ -31,8 +35,9 @@ func (t *Thunder) InitPanels(app *tview.Application, args Args) {
 	t.App = app
 	t.Pages = tview.NewPages()
 	t.Popups = NewPopupManager()
+
 	vol := percentageToVolume(args.volume)
-	t.Playback = NewPlaybackController(NewPlayer(vol))
+	t.Playback = NewPlaybackController(player.New(vol))
 
 	t.Library = NewLibrary(args.musicPath)
 	t.Queue = NewQueueView(t.Playback)
@@ -50,6 +55,7 @@ func (t *Thunder) InitPanels(app *tview.Application, args Args) {
 func (t *Thunder) InitServer(args Args) {
 	server, err := NewServer(args.sockPath, t.Playback)
 	if err != nil {
+		err := fmt.Errorf("Initialize server: %w", err)
 		exit(err)
 	}
 
@@ -59,9 +65,19 @@ func (t *Thunder) InitServer(args Args) {
 func (t *Thunder) InitLogger(args Args) {
 	logger, err := logger.New(args.logPath)
 	if err != nil {
+		err := fmt.Errorf("Initialize logger: %w", err)
 		exit(err)
 	}
 	t.Logger = logger
+}
+
+func (t *Thunder) ParseConfig(args Args) {
+	config, err := config.Parse(args.cfgPath)
+	if err != nil {
+		err := fmt.Errorf("Parse config: %w", err)
+		exit(err)
+	}
+	t.Config = config
 }
 
 func (t *Thunder) renderPlayback(s Snapshot) {
@@ -72,32 +88,7 @@ func (t *Thunder) renderPlayback(s Snapshot) {
 
 func NewThunder() *Thunder {
 	return &Thunder{
-		Colors: DefaultColors(),
-		ErrCh:  make(chan error, 64),
-	}
-}
-
-type Colors struct {
-	Accent      tcell.Color
-	Song        tcell.Color
-	Playlist    tcell.Color
-	Background  tcell.Color
-	Foreground  tcell.Color
-	Popup       tcell.Color
-	Selected    tcell.Color
-	Highlighted tcell.Color
-}
-
-func DefaultColors() *Colors {
-	return &Colors{
-		Background:  tcell.ColorDefault,
-		Foreground:  tcell.GetColor("#FEF9FF"),
-		Accent:      tcell.GetColor("#6DB2EE"),
-		Song:        tcell.GetColor("#7CA7DF"),
-		Playlist:    tcell.GetColor("#6DB2EE"),
-		Popup:       tcell.GetColor("#6DB2EE"),
-		Selected:    tcell.GetColor("#9F9FED"),
-		Highlighted: tcell.GetColor("#59BDEB"),
+		ErrCh: make(chan error, 64),
 	}
 }
 
@@ -122,7 +113,8 @@ func (t *Thunder) CyclePanels(forward bool) {
 
 	currentPanel := t.Panels[t.CurrentPanelIdx]
 
-	t.SetFocusPanel(prevPanel, currentPanel)
+	t.Unfocus(prevPanel)
+	t.Focus(currentPanel)
 }
 
 const seekStep = 5 * time.Second
@@ -147,9 +139,9 @@ func (t *Thunder) handlePlaybackKey(e *tcell.EventKey) *tcell.EventKey {
 	case '[':
 		c.Seek(-seekStep)
 	case '+', '=':
-		c.ChangeVolume(volumeStep)
+		c.ChangeVolume(player.VolumeStep)
 	case '-':
-		c.ChangeVolume(-volumeStep)
+		c.ChangeVolume(-player.VolumeStep)
 	case 'm':
 		c.ToggleMute()
 	case 'y':
@@ -160,15 +152,10 @@ func (t *Thunder) handlePlaybackKey(e *tcell.EventKey) *tcell.EventKey {
 	return nil
 }
 
-func (t *Thunder) SetFocusPanel(prevPanel, currentPanel Panel) {
-	t.Unfocus(prevPanel)
-	t.Focus(currentPanel)
-}
-
 func (t *Thunder) Unfocus(panel Panel) {
 	if panel != nil {
-		panel.SetBorderColor(t.Colors.Foreground)
-		panel.SetTitleColor(t.Colors.Foreground)
+		panel.SetBorderColor(colors.Foreground)
+		panel.SetTitleColor(colors.Foreground)
 	}
 }
 
@@ -178,15 +165,15 @@ func (t *Thunder) Focus(panel Panel) {
 
 		t.App.SetFocus(primitive)
 
-		panel.SetBorderColor(t.Colors.Accent)
-		panel.SetTitleColor(t.Colors.Accent)
+		panel.SetBorderColor(colors.Accent)
+		panel.SetTitleColor(colors.Accent)
 	}
 }
 
 func (t *Thunder) UnfocusAll() {
 	for _, p := range t.Panels {
-		p.SetBorderColor(t.Colors.Foreground)
-		p.SetTitleColor(t.Colors.Foreground)
+		p.SetBorderColor(colors.Foreground)
+		p.SetTitleColor(colors.Foreground)
 	}
 }
 

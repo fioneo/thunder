@@ -254,13 +254,14 @@ func errorPopup(err error) {
 	if err == nil {
 		return
 	}
-	lines := strings.Split(err.Error(), "\n")
-	timeoutPopup(err.Error(), 3*time.Second, tcell.ColorRed, tcell.ColorRed, 0, len(lines))
+	replaced := strings.ReplaceAll(err.Error(), ":", "\n")
+	lines := strings.Count(replaced, "\n")
+	timeoutPopup(err.Error(), 3*time.Second, tcell.ColorRed, tcell.ColorRed, 0, lines)
 }
 
-func infoPopup(title, desc string) {
-	text := fmt.Sprintf("%s\n%s", title, desc)
-	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground, 0, len(text))
+func infoPopup(text string) {
+	lines := strings.Count(text, "\n")
+	timeoutPopup(text, 3*time.Second, thunder.Colors.Accent, thunder.Colors.Foreground, 0, lines)
 }
 
 func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tcell.Color, width, height int) {
@@ -271,7 +272,7 @@ func timeoutPopup(text string, timeout time.Duration, textColor, borderColor tce
 	textView.SetBackgroundColor(thunder.Colors.Background).SetBorder(true).
 		SetBorderColor(borderColor).SetBorderPadding(1, 1, 1, 1)
 
-	height += 4 // 2 padding + 2 for borders
+	height += 4 // 2 for padding + 2 for borders
 	popup := NewTimeoutPopup(textView, nextID("timeout_popup"), false, TopRight, timeout, 0, 0, height, 0)
 
 	thunder.Popups.Show(popup)
@@ -582,7 +583,7 @@ func downloadPopup() {
 		onUI(func() {
 			downloading = false
 			frame.SetTitle("Download completed")
-			infoPopup("Song saved to", dir)
+			infoPopup(fmt.Sprintf("Song saved to\n.%s\n", dir))
 			thunder.Library.Refresh()
 		})
 	}

@@ -31,9 +31,7 @@ func NewLibrary(path string) *Library {
 		SetTextStyle(tcell.StyleDefault.Foreground(thunder.Colors.Song).Background(thunder.Colors.Background))
 
 	pages := tview.NewPages().AddPage("library", list, true, true).AddPage("empty_directory", emptyDirectory, true, false)
-
 	info := NewLibraryInfo()
-
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(info, 1, 0, false).AddItem(pages, 0, 1, true)
 
 	wrapper := tview.NewFrame(flex).SetBorders(0, 0, 0, 0, 0, 0)
@@ -262,9 +260,12 @@ func (l *Library) PasteFile(file File, path string) bool {
 	}
 	defer to.Close()
 
-	if _, err := io.Copy(to, from); err != nil {
-		errorPopup(fmt.Errorf("Copy error\nSee log file for details."))
-		SendErr(fmt.Errorf("copy from %s to %s: %v", file.Path(), toPath, err))
+	if _, cErr := io.Copy(to, from); cErr != nil {
+		err := ErrorMessage{
+			err:     fmt.Errorf("copy from %s to %s: %v", file.Path(), toPath, err),
+			errView: fmt.Errorf("[ %s ]\nFailed to copy file.\nSee the log file for details.\n", file.Path()),
+		}
+		SendErr(err)
 		return false
 	}
 
@@ -498,6 +499,10 @@ func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
 		if len(l.files) == 0 ||
 			idx < 0 ||
 			idx >= len(l.files) {
+			return e
+		}
+
+		if len(l.list.GetSelectedItems()) > 0 {
 			return e
 		}
 		file := l.files[idx]

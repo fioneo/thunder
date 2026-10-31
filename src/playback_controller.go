@@ -358,7 +358,7 @@ func (c *PlaybackController) start(song Song) bool {
 	if pErr != nil {
 		err := ErrorMessage{
 			err:     pErr,
-			errView: fmt.Errorf("[ %s ]\nError playing song.\nSee log file for details.", song.Name()),
+			errView: fmt.Errorf("[ %s ]\nFailed to play the song.\nSee the log file for details.\n", song.Name()),
 		}
 		c.errs = append(c.errs, err)
 		return false

@@ -33,7 +33,7 @@ info "Cloning repository"
 git clone --depth 1 "$REPO_URL" "$TMP_DIR/thunder"
 
 info "Building"
-(cd "$TMP_DIR/thunder" && go build -o thunder .)
+(cd "$TMP_DIR/thunder" && go build -o thunder ./src)
 
 # Install
 mkdir -p "$BIN_DIR"

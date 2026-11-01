@@ -13,10 +13,9 @@ const (
 )
 
 type QueueView struct {
-	*tview.Flex
-	nowPlaying *tview.TextView
-	pages      *tview.Pages
-	list       *List
+	*tview.Pages
+	frame *tview.Frame
+	list  *List
 
 	ctrl     *PlaybackController
 	snap     Snapshot
@@ -25,36 +24,31 @@ type QueueView struct {
 
 func NewQueueView(ctrl *PlaybackController) *QueueView {
 	colors := colors
-	background := tcell.StyleDefault.Background(colors.Background)
 
 	list := NewList()
 	list.ApplySongStyles().SetBackgroundColor(colors.Background)
 
-	empty := tview.NewTextView().
-		SetText("  queue is empty").
-		SetTextStyle(background.Foreground(colors.Song))
+	empty := tview.NewTextView().SetText("  Empty queue").
+		SetTextStyle(tcell.StyleDefault.Background(colors.Background).Foreground(colors.Song))
 
-	nowPlaying := tview.NewTextView().
-		SetTextStyle(background.Foreground(colors.Highlighted))
+	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
 
 	pages := tview.NewPages().
-		AddPage(queuePageList, list, true, false).
-		AddPage(queuePageEmpty, empty, true, true)
-
-	flex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(nowPlaying, 1, 0, false).
-		AddItem(pages, 0, 1, true)
+		AddPage(queuePageList, frame, true, true).
+		AddPage(queuePageEmpty, empty, true, false)
 
 	q := &QueueView{
-		Flex:       flex,
-		nowPlaying: nowPlaying,
-		pages:      pages,
-		list:       list,
-		ctrl:       ctrl,
+		Pages: pages,
+		frame: frame,
+		list:  list,
+		ctrl:  ctrl,
 	}
 
+	q.Primitive = q
+
 	list.SetChangedFunc(func(int, string) { q.UpdateInfo() })
+
+	q.frame.SetBackgroundColor(colors.Background)
 	q.SetInputCapture(q.handleKey)
 
 	q.SetBorder(true).
@@ -74,6 +68,7 @@ func (q *QueueView) Render(s Snapshot) {
 	if s.Version < q.snap.Version {
 		return
 	}
+	q.frame.Clear()
 	q.snap = s
 	entries := make([]ListEntry, len(s.Upcoming))
 	for i, song := range s.Upcoming {
@@ -81,22 +76,17 @@ func (q *QueueView) Render(s Snapshot) {
 	}
 	q.list.Reset(entries)
 
-	if len(entries) == 0 {
-		q.pages.SwitchToPage(queuePageEmpty)
+	if q.snap.Now != nil {
+		q.frame.AddText("  "+q.snap.Now.Name(), true, tview.AlignLeft, colors.Highlighted)
+	}
+
+	if len(entries) == 0 && q.snap.Now == nil {
+		q.SwitchToPage(queuePageEmpty)
 	} else {
-		q.pages.SwitchToPage(queuePageList)
+		q.SwitchToPage(queuePageList)
 	}
 
-	q.nowPlaying.SetText(nowPlayingText(s))
 	q.UpdateInfo()
-}
-
-func nowPlayingText(s Snapshot) string {
-	if s.Now == nil {
-		return "  nothing playing"
-	}
-
-	return "  " + s.Now.Name()
 }
 
 func (q *QueueView) refresh() {

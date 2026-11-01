@@ -76,6 +76,6 @@ func (li *LibraryInfo) Draw(screen tcell.Screen) {
 	}
 
 	if showCopied {
-		PrintText(screen, x, y, width, copied, base.Foreground(tcell.ColorBlack).Background(tcell.ColorYellow))
+		PrintText(screen, x, y, width, copied, base.Foreground(tcell.ColorBlack).Background(colors.Copied))
 	}
 }

@@ -23,6 +23,8 @@ type Colors struct {
 	Popup       tcell.Color `json:"popup"`
 	Selected    tcell.Color `json:"selected"`
 	Highlighted tcell.Color `json:"highlighted"`
+	Copied      tcell.Color `json:"copied"`
+	Placeholder tcell.Color `json:"placeholder"`
 }
 
 type Config struct {
@@ -68,5 +70,7 @@ func DefaultColors() Colors {
 		Popup:       tcell.GetColor("#6DB2EE"),
 		Selected:    tcell.GetColor("#9F9FED"),
 		Highlighted: tcell.GetColor("#59BDEB"),
+		Copied:      tcell.GetColor("#F3C98B"),
+		Placeholder: tcell.GetColor("#595959"),
 	}
 }

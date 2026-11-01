@@ -304,7 +304,7 @@ func inputPopup(title, placeholder, text string, handler func(ok bool, text stri
 }
 
 func NewInput(placeholder string, textStyle, placeholderStyle tcell.Style) *tview.InputField {
-	return tview.NewInputField().SetPlaceholder(placeholder).SetFieldStyle(textStyle).SetPlaceholderStyle(placeholderStyle)
+	return tview.NewInputField().SetPlaceholder(placeholder).SetFieldStyle(textStyle).SetPlaceholderStyle(tcell.StyleDefault.Background(colors.Background).Foreground(colors.Placeholder))
 }
 
 // zero width or height means primitive will be resized automatically
@@ -481,6 +481,7 @@ func downloadPopup() {
 					if entry.Duration != nil {
 						info.duration = *entry.Duration
 					}
+
 					songs = append(songs, info)
 					list.AddItem(fmt.Sprintf("%s %s", tview.Escape(info.title), fmtDur(info.duration)), "", 0, nil)
 				}
@@ -500,7 +501,11 @@ func downloadPopup() {
 	}
 
 	download := func(song downloadInfo, dir string) {
-		fail := func(err error) {
+		fail := func(dErr error) {
+			err := ErrorMessage{
+				err:     dErr,
+				errView: fmt.Errorf("Download error\n.See log file for details.\n"),
+			}
 			SendErr(err)
 			onUI(func() {
 				downloading = false

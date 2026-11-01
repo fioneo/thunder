@@ -189,6 +189,10 @@ func (l *List) GetSelectedItems() []Selectable {
 	return l.selection.items
 }
 
+func (l *List) Length() int {
+	return len(l.items)
+}
+
 func (l *List) InsertItem(idx int, item Selectable, text string, style, selectedStyle *tcell.Style) *List {
 	listItem := &listItem{
 		item:          item,

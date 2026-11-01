@@ -20,7 +20,6 @@ type Library struct {
 	files       []File
 	copied      []File
 	currentPath string
-	currentIdx  int
 	idxHistory  map[string]int
 }
 
@@ -51,7 +50,6 @@ func NewLibrary(path string) *Library {
 	}
 
 	library.list.SetChangedFunc(func(idx int, _ string) {
-		library.currentIdx = idx
 		library.UpdateInfo()
 	})
 
@@ -134,10 +132,6 @@ func (l *Library) Remove(idx int) error {
 		return err
 	}
 
-	if l.currentIdx > idx || l.currentIdx == len(l.files) {
-		l.currentIdx--
-	}
-
 	if len(l.copied) == 0 {
 		return err
 	}
@@ -187,7 +181,7 @@ func (l *Library) Rename(oldPath, newPath string) error {
 }
 
 func (l *Library) Copy() int {
-	idx := l.currentIdx
+	idx := l.list.GetCurrentIdx()
 	if len(l.files) == 0 ||
 		idx < 0 ||
 		idx >= len(l.files) {
@@ -325,7 +319,6 @@ func (l *Library) SetCurrentIdx(idx int) {
 	if idx < 0 || idx >= len(l.files) {
 		return
 	}
-	l.currentIdx = idx
 	l.list.SetCurrentIdx(idx)
 	l.UpdateInfo()
 }
@@ -340,16 +333,16 @@ func (l *Library) selectedFiles() []File {
 }
 
 func (l *Library) Clear() {
-	l.currentIdx = 0
 	l.list.Clear()
 	l.files = nil
 }
 
 func (l *Library) Refresh() {
-	if l.currentIdx < 0 || l.currentIdx >= len(l.files) {
+	idx := l.list.GetCurrentIdx()
+	if idx < 0 || idx >= len(l.files) {
 		l.readDir(l.currentPath)
 	} else {
-		file := l.files[l.currentIdx]
+		file := l.files[idx]
 		l.readDir(l.currentPath)
 		l.SetCurrentIdx(l.GetFileIdx(file.Path()))
 	}
@@ -358,7 +351,7 @@ func (l *Library) Refresh() {
 }
 
 func (l *Library) UpdateInfo() {
-	idx := l.currentIdx
+	idx := l.list.GetCurrentIdx()
 	if len(l.files) > 0 {
 		idx++
 	}
@@ -381,7 +374,7 @@ func (l *Library) CheckIsEmpty() {
 }
 
 func (l *Library) handleKey(e *tcell.EventKey) *tcell.EventKey {
-	idx := l.currentIdx
+	idx := l.list.GetCurrentIdx()
 
 	switch e.Key() {
 	case tcell.KeyCtrlR:

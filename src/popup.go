@@ -441,11 +441,16 @@ func downloadPopup() {
 			defer scancel()
 
 			format := fmt.Sprintf("ytsearch%d:%s", 20, query)
-			out, sErr := exec.CommandContext(sctx, "yt-dlp", format, "--flat-playlist", "--dump-single-json").Output()
+			cmd := exec.CommandContext(sctx, "yt-dlp", format, "--flat-playlist", "--dump-single-json")
+
+			var stdErr bytes.Buffer
+			cmd.Stderr = &stdErr
+
+			out, sErr := cmd.Output()
 
 			var res searchResult
 			if sErr != nil {
-				sErr = fmt.Errorf("yt-dlp search: %w", sErr)
+				sErr = fmt.Errorf("yt-dlp search: %v: %s", sErr, stdErr.String())
 			} else if jerr := json.Unmarshal(out, &res); jerr != nil {
 				sErr = fmt.Errorf("parse search result: %w", jerr)
 			}
@@ -465,7 +470,7 @@ func downloadPopup() {
 				if sErr != nil {
 					err := ErrorMessage{
 						err:     sErr,
-						errView: fmt.Errorf("Search error.\nSee log file."),
+						errView: fmt.Errorf("Search error.\nSee log file.\n"),
 					}
 					SendErr(err)
 					return

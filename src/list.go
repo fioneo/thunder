@@ -74,12 +74,10 @@ func (s *Selection) Retain(keep func(Selectable) bool) {
 }
 
 type listItem struct {
-	item                   Selectable
-	text                   string
-	style                  *tcell.Style
-	selectedStyle          *tcell.Style
-	highlightStyle         *tcell.Style
-	highlightSelectedStyle *tcell.Style
+	item          Selectable
+	text          string
+	style         *tcell.Style
+	selectedStyle *tcell.Style
 }
 
 type List struct {
@@ -95,13 +93,9 @@ type List struct {
 
 	textStyle tcell.Style
 
-	currentItemStyle tcell.Style
+	currentStyle tcell.Style
 
 	selectedStyle tcell.Style
-
-	selectedFocusOnly bool
-
-	highlightFullLine bool
 
 	wrapAround bool
 
@@ -128,17 +122,6 @@ func (l *List) Grow(capacity int) *List {
 	return l
 }
 
-func (l *List) SetItemHighlightedStyle(idx int, highlightStyle *tcell.Style, highlightSelectedStyle *tcell.Style) {
-	if idx < 0 || idx >= len(l.items) {
-		return
-	}
-
-	listItem := l.items[idx]
-
-	listItem.highlightStyle = highlightStyle
-	listItem.highlightSelectedStyle = highlightSelectedStyle
-}
-
 func (l *List) SetItemOffset(items int) *List {
 	l.itemOffset = items
 	return l
@@ -159,16 +142,6 @@ func (l *List) SetCurrentIdx(idx int) *List {
 
 func (l *List) GetCurrentIdx() int {
 	return l.currentIdx
-}
-
-func (l *List) SetSelectedFocusOnly(focusOnly bool) *List {
-	l.selectedFocusOnly = focusOnly
-	return l
-}
-
-func (l *List) SetHighlightFullLine(highlight bool) *List {
-	l.highlightFullLine = highlight
-	return l
 }
 
 func (l *List) SetWrapAround(wrapAround bool) *List {
@@ -293,10 +266,8 @@ func (l *List) Reset(entries []ListEntry) {
 func (l *List) ApplySongStyles() *List {
 	return l.
 		SetTextStyle(tcell.StyleDefault.Foreground(colors.Song).Background(colors.Background)).
-		SetSelectedFocusOnly(true).
-		SetCurrentItemStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Song)).
+		SetCurrentStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Song)).
 		SetSelectedStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack).Background(colors.Selected)).
-		SetHighlightFullLine(true).
 		SetWrapAround(false)
 }
 
@@ -340,8 +311,8 @@ func (l *List) SetTextStyle(style tcell.Style) *List {
 	return l
 }
 
-func (l *List) SetCurrentItemStyle(style tcell.Style) *List {
-	l.currentItemStyle = style
+func (l *List) SetCurrentStyle(style tcell.Style) *List {
+	l.currentStyle = style
 	return l
 
 }
@@ -390,7 +361,7 @@ func (l *List) Draw(screen tcell.Screen) {
 			break
 		}
 
-		checkFocus := !l.selectedFocusOnly || l.HasFocus()
+		checkFocus := l.HasFocus()
 
 		current := index == l.currentIdx && checkFocus
 		style := l.textStyle
@@ -405,31 +376,17 @@ func (l *List) Draw(screen tcell.Screen) {
 			if listItem.selectedStyle != nil {
 				style = *listItem.selectedStyle
 			} else {
-				style = l.currentItemStyle
-			}
-		}
-
-		highlightStyle := tcell.StyleDefault
-		highlightSelectedStyle := tcell.StyleDefault
-		highlighted := listItem.highlightStyle != nil && listItem.highlightSelectedStyle != nil
-
-		if highlighted {
-			highlightStyle = *listItem.highlightStyle
-			highlightSelectedStyle = *listItem.highlightSelectedStyle
-			if current {
-				style = highlightSelectedStyle
-			} else {
-				style = highlightStyle
+				style = l.currentStyle
 			}
 		}
 
 		text := listItem.text
-		printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected, highlightStyle, highlighted)
+		printedWidth := printListItem(screen, text, x, y, l.horizontalOffset, width, style, selectedStyle, selected)
 		if printedWidth > maxWidth {
 			maxWidth = printedWidth
 		}
 
-		if (current || selected) && l.highlightFullLine {
+		if current || selected {
 			for bx := printedWidth; bx < width; bx++ {
 				screen.SetContent(x+bx, y, ' ', nil, style)
 			}

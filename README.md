@@ -8,7 +8,7 @@ A terminal music player written in Go.
 
 ## Requirements
 
-- Go 1.24 or newer
+- Go 1.25 or newer
 - `yt-dlp` and `ffmpeg` (only for downloading songs)
 
 ## Install

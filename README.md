@@ -14,7 +14,7 @@ A terminal music player written in Go.
 ## Install
 
 Run the installation script. It downloads the source code, builds it,
-and installs `thunder` to `~/.local/bin/thunder`:
+and installs `thunder` to `~/.local/bin`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/fioneo/thunder/main/install.sh | sh
